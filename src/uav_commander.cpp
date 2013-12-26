@@ -22,22 +22,30 @@
 #include "ros/ros.h"
 #include "std_msgs/String.h"
 #include "pctx_control/Control.h"
+#include "visualeyez_tracker/TrackerPose.h"
 
 #include <sstream>
+
+void getUpdatedPose(const visualeyez_tracker::TrackerPose& trackerPose)
+{
+    ROS_INFO(" Recieved Tracker Location: [%s] [%f] [%f] [%f]",trackerPose.tracker_id.c_str(),trackerPose.pose.x ,trackerPose.pose.y ,trackerPose.pose.z );
+}
 
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "uav_commander");
     ros::NodeHandle n;
     ros::Publisher uav_commands = n.advertise<pctx_control::Control>("sendPCTXControl", 1000);
+    ros::Subscriber sub = n.subscribe("TrackerPosition", 1000, getUpdatedPose);
     ros::Rate loop_rate(10);
     int count = 0;
+    std::vector<int16_t> controlValues(9,0);
     while (ros::ok())
     {
         pctx_control::Control controlMessage;
-        controlMessage.channel = 2;
-        controlMessage.value   = count%1020;
-        ROS_INFO("UAV_Commander sending to channel:%d value:%d",controlMessage.channel,controlMessage.value);
+        controlValues[0] = controlValues[1] =controlValues[2] =controlValues[3] =controlValues[4] =controlValues[5] =controlValues[6] =controlValues[7] =controlValues[8] = count%1020;
+        controlMessage.values  = controlValues;
+        ROS_INFO("UAV_Commander broadcasting to all channels value:%d",controlValues[0]);
         uav_commands.publish(controlMessage);
         ros::spinOnce();
         loop_rate.sleep();
