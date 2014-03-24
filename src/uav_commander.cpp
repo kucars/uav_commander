@@ -25,10 +25,14 @@
 #include "visualeyez_tracker/TrackerPose.h"
 
 #include <sstream>
-
+#define PI 3.14159265
+double x,y,z;
 void getUpdatedPose(const visualeyez_tracker::TrackerPose& trackerPose)
 {
-    ROS_INFO(" Recieved Tracker Location: [%s] [%f] [%f] [%f]",trackerPose.tracker_id.c_str(),trackerPose.pose.x ,trackerPose.pose.y ,trackerPose.pose.z );
+    ROS_DEBUG(" Recieved Tracker Location: [%s] [%f] [%f] [%f]",trackerPose.tracker_id.c_str(),trackerPose.pose.x ,trackerPose.pose.y ,trackerPose.pose.z );
+    x = trackerPose.pose.x;
+    y = trackerPose.pose.y;
+    z = trackerPose.pose.z;
 }
 
 int main(int argc, char **argv)
@@ -37,19 +41,22 @@ int main(int argc, char **argv)
     ros::NodeHandle n;
     ros::Publisher uav_commands = n.advertise<pctx_control::Control>("sendPCTXControl", 1000);
     ros::Subscriber sub = n.subscribe("TrackerPosition", 1000, getUpdatedPose);
-    ros::Rate loop_rate(10);
+    ros::Rate loop_rate(15);
     int count = 0;
     std::vector<int16_t> controlValues(9,0);
+    double k = 3;
     while (ros::ok())
     {
         pctx_control::Control controlMessage;
-        controlValues[0] = controlValues[1] =controlValues[2] =controlValues[3] =controlValues[4] =controlValues[5] =controlValues[6] =controlValues[7] =controlValues[8] = count%1020;
+        int val = count%1020;//int(sin((count%180)*PI/180.0)*1020);
+        //controlValues[0] = controlValues[1] =controlValues[2] =controlValues[3] =controlValues[4] =controlValues[5] =controlValues[6] =controlValues[7] =controlValues[8] = val;
+        controlValues[0] = k*y;
         controlMessage.values  = controlValues;
-        ROS_INFO("UAV_Commander broadcasting to all channels value:%d",controlValues[0]);
+        ROS_DEBUG("UAV_Commander broadcasting to all channels value:%d",controlValues[0]);
         uav_commands.publish(controlMessage);
         ros::spinOnce();
         loop_rate.sleep();
-        count+=20;
+        count+=10;
     }
     return 0;
 }
