@@ -1,0 +1,6 @@
+<launch>
+
+  <node name="position_controller" pkg="uav_commander" type="position_controller" ns="pioneer" output="screen">
+    <rosparam command="load" file="$(find uav_commander)/config/params.yaml" />
+  </node>
+</launch>
