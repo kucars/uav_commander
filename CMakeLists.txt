@@ -4,6 +4,8 @@ project(uav_commander)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
+find_package(Eigen REQUIRED)
+
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
@@ -93,9 +95,11 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 # include_directories(include)
-include_directories(
+include_directories(include
   ${catkin_INCLUDE_DIRS}
+  ${Eigen_INCLUDE_DIRS}
 )
+
 
 ## Declare a cpp library
 # add_library(uav_commander
@@ -103,14 +107,14 @@ include_directories(
 # )
 
 ## Declare a cpp executable
-add_executable(uav_commander src/uav_commander.cpp)
+add_executable(position_controller src/uav_commander.cpp)
 
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
-add_dependencies(uav_commander uav_commander_generate_messages_cpp)
+add_dependencies(position_controller uav_commander_generate_messages_cpp)
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(uav_commander
+target_link_libraries(position_controller
   ${catkin_LIBRARIES}
 )
 
