@@ -9,6 +9,7 @@ find_package(Eigen REQUIRED)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
+  nav_msgs
   std_msgs
 )
 
@@ -116,6 +117,7 @@ add_dependencies(position_controller uav_commander_generate_messages_cpp)
 ## Specify libraries to link a library or executable target against
 target_link_libraries(position_controller
   ${catkin_LIBRARIES}
+-lpq
 )
 
 #############
