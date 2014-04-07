@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   nav_msgs
   std_msgs
+  visualeyez_tracker
 )
 
 ## System dependencies are found with CMake's conventions
