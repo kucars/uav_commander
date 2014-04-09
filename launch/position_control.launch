@@ -1,6 +1,8 @@
 <launch>
 
-  <node name="position_controller" pkg="uav_commander" type="position_controller" ns="pioneer" output="screen">
+  <node name="position_controller" pkg="uav_commander" type="position_controller" ns="uav" output="screen">
     <rosparam command="load" file="$(find uav_commander)/config/params.yaml" />
   </node>
+
+  <node name="rqt_reconfigure" pkg="rqt_reconfigure" type="rqt_reconfigure"/>
 </launch>

@@ -1,23 +1,23 @@
 /***************************************************************************
-* Copyright (C) 2013 - 2014 by                                                    *
+* Copyright (C) 2013 - 2014 by *
 * Tarek Taha and Rui P. de Figueiredo, Khalifa University Robotics Institute KURI *
-*                     <tarek.taha@kustar.ac.ae>                            	  *
-*                                                                          	  *
-*                                                                           	  *
-* This program is free software; you can redistribute it and/or modify     	  *
-* it under the terms of the GNU General Public License as published by     	  *
-* the Free Software Foundation; either version 2 of the License, or        	  *
-* (at your option) any later version.                                      	  *
-*                                                                          	  *
-* This program is distributed in the hope that it will be useful,          	  *
-* but WITHOUT ANY WARRANTY; without even the implied warranty of           	  *
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the             	  *
-* GNU General Public License for more details.                              	  *
-*                                                                          	  *
-* You should have received a copy of the GNU General Public License        	  *
-* along with this program; if not, write to the                            	  *
-* Free Software Foundation, Inc.,                                          	  *
-* 51 Franklin Steet, Fifth Floor, Boston, MA 02111-1307, USA.              	  *
+* <tarek.taha@kustar.ac.ae> *
+* *
+* *
+* This program is free software; you can redistribute it and/or modify *
+* it under the terms of the GNU General Public License as published by *
+* the Free Software Foundation; either version 2 of the License, or *
+* (at your option) any later version. *
+* *
+* This program is distributed in the hope that it will be useful, *
+* but WITHOUT ANY WARRANTY; without even the implied warranty of *
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the *
+* GNU General Public License for more details. *
+* *
+* You should have received a copy of the GNU General Public License *
+* along with this program; if not, write to the *
+* Free Software Foundation, Inc., *
+* 51 Franklin Steet, Fifth Floor, Boston, MA 02111-1307, USA. *
 ***********************************************************************************/
 #include "ros/ros.h"
 #include "std_msgs/String.h"
@@ -72,7 +72,7 @@ public:
     Eigen::Matrix<double,6,1> previous_pose_;
     Eigen::Matrix<double,6,1> current_pose_;
 
- 	Eigen::Matrix<double,6,6> vel_cmd_previous;
+  Eigen::Matrix<double,6,6> vel_cmd_previous;
 
     ros::Subscriber goal_sub;
     ros::Subscriber markers_sub;
@@ -100,7 +100,7 @@ public:
         ROS_INFO_STREAM("head marker id: "<<head_marker_id_);
         ROS_INFO_STREAM("freq: "<<freq_);
 
-	//vel_cm_previous_vec=Eigen
+//vel_cm_previous_vec=Eigen
         goal_sub = n_.subscribe("Goal", 1000, &PositionCommand::getGoal, this);
 
         markers_sub = n_.subscribe("/TrackerPosition", 1000, &PositionCommand::getUpdatedPose, this);
@@ -123,18 +123,18 @@ void PositionCommand::getUpdatedPoseOdometry(const nav_msgs::Odometry::ConstPtr&
     if(!goal_)
     {
         vel_cmd.publish(vel_cmd_msg);
- 	return;
+  return;
     }
 
     if(count==0)
     {
-	ROS_INFO("entrou");
-    	gettimeofday( &previous_time, NULL );
-	++count;
-	previous_accum_error << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
+ROS_INFO("entrou");
+     gettimeofday( &previous_time, NULL );
+++count;
+previous_accum_error << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
         return;
     }
-	
+
     // Define a local reference frame
     Eigen::Vector3d uav_x=(head_marker_position-base_marker_position).normalized(); // Heading
 
@@ -151,24 +151,24 @@ void PositionCommand::getUpdatedPoseOdometry(const nav_msgs::Odometry::ConstPtr&
         double roll = current_euler(2,0);
 
         current_pose_ << odom_orig->pose.pose.position.x,
-                	 odom_orig->pose.pose.position.y,
-			 odom_orig->pose.pose.position.z,
-			 0.0,
-			 0.0,
-			 0.0;
+                 odom_orig->pose.pose.position.y,
+odom_orig->pose.pose.position.z,
+0.0,
+0.0,
+0.0;
 
-	std::cout << "current_pose: " << current_pose_ << std::endl;
-	std::cout << "goal_pose: " << goal_pose_ << std::endl;
+std::cout << "current_pose: " << current_pose_ << std::endl;
+std::cout << "goal_pose: " << goal_pose_ << std::endl;
 
         Eigen::Matrix<double,6,1> error=goal_pose_-current_pose_;
         // Check if goal was reached
         /*if(equalFloat(current_pose_(0,0), goal_pose_(0,0),epsilon) ||
-                equalFloat(current_pose_(1,0), goal_pose_(1,0),epsilon) ||
-                equalFloat(current_pose_(2,0), goal_pose_(2,0),epsilon) ||
-                equalFloat(current_pose_(3,0), goal_pose_(3,0),epsilon) ||
-                equalFloat(current_pose_(4,0), goal_pose_(4,0),epsilon) ||
-                equalFloat(current_pose_(5,0), goal_pose_(5,0),epsilon)
-                )*/
+equalFloat(current_pose_(1,0), goal_pose_(1,0),epsilon) ||
+equalFloat(current_pose_(2,0), goal_pose_(2,0),epsilon) ||
+equalFloat(current_pose_(3,0), goal_pose_(3,0),epsilon) ||
+equalFloat(current_pose_(4,0), goal_pose_(4,0),epsilon) ||
+equalFloat(current_pose_(5,0), goal_pose_(5,0),epsilon)
+)*/
         if(error.norm()<epsilon) // CHANGE THIS
         {
             ROS_INFO("Reached goal!");
@@ -177,40 +177,40 @@ void PositionCommand::getUpdatedPoseOdometry(const nav_msgs::Odometry::ConstPtr&
         }
         else //control
         {
-		struct timeval current_time;
-  	 	gettimeofday( &previous_time, NULL );
-	    
-            	ROS_INFO_STREAM("position error norm: "<< error.transpose().norm());
-  		//timespec current_time;
-    		//clock_gettime(CLOCK_MONOTONIC_RAW, &current_time);
-		//double period = (double) current_time.tv_sec + (double) 1e-6 * tv.tv_usec; 
+struct timeval current_time;
+   gettimeofday( &previous_time, NULL );
 
-    		//double period = (current_time.tv_sec - previous_time.tv_sec) + ((current_time.tv_usec - previous_time.tv_usec) / 1000000.0);
-		double period=0.020;
-		previous_time=current_time;
-	    	//std::cout << "time diff: " << period << std::endl;
+             ROS_INFO_STREAM("position error norm: "<< error.transpose().norm());
+   //timespec current_time;
+     //clock_gettime(CLOCK_MONOTONIC_RAW, &current_time);
+//double period = (double) current_time.tv_sec + (double) 1e-6 * tv.tv_usec;
 
-            	//Eigen::Matrix<double,6,6> vel_cmd_current=Kp*(goal_pose_-current_pose_).transpose() + Kd*(current_pose_-previous_pose_).transpose()*freq_;
-           	Eigen::Matrix<double,6,1> vel_cm_previous_vec;
-	    	vel_cm_previous_vec << vel_cmd_previous(0,0), vel_cmd_previous(1,1),vel_cmd_previous(2,2),vel_cmd_previous(3,3),vel_cmd_previous(4,4),vel_cmd_previous(5,5);
-		Eigen::Matrix<double,6,1> current_error=(goal_pose_ - previous_pose_);
-	    	Eigen::Matrix<double,6,1> vdiff = (current_error - (goal_pose_ - vel_cm_previous_vec));   // Differential Part
-	    	Eigen::Matrix<double,6,1> current_accum_error = (current_error + previous_accum_error);   // Integral Part
-            	Eigen::Matrix<double,6,6> vel_cmd_current=Kp*(goal_pose_-current_pose_).transpose() + Kd*vdiff.transpose() + Ki*current_accum_error.transpose();
-		
-		std::cout << "vdiff: " << vdiff.transpose() << std::endl;
-		std::cout << "error: " << (goal_pose_-current_pose_).transpose() << std::endl;
-		std::cout << "vel_cm_current: "<< vel_cmd_current.transpose() << std::endl;
-            	vel_cmd_msg.linear.x=vel_cmd_current(0,0);
-            	vel_cmd_msg.linear.y=vel_cmd_current(1,1);
-            	vel_cmd_msg.linear.z=vel_cmd_current(2,2);
-            	//vel_cmd_msg.angular.x=vel_cmd_current(3,3);
-            	//vel_cmd_msg.angular.y=vel_cmd_current(4,4);
-            	//vel_cmd_msg.angular.z=vel_cmd_current(5,5);
-            	vel_cmd.publish(vel_cmd_msg);
-	    
-		previous_accum_error=current_accum_error;
-	    	vel_cmd_previous=vel_cmd_current;
+     //double period = (current_time.tv_sec - previous_time.tv_sec) + ((current_time.tv_usec - previous_time.tv_usec) / 1000000.0);
+double period=0.020;
+previous_time=current_time;
+//std::cout << "time diff: " << period << std::endl;
+
+             //Eigen::Matrix<double,6,6> vel_cmd_current=Kp*(goal_pose_-current_pose_).transpose() + Kd*(current_pose_-previous_pose_).transpose()*freq_;
+            Eigen::Matrix<double,6,1> vel_cm_previous_vec;
+vel_cm_previous_vec << vel_cmd_previous(0,0), vel_cmd_previous(1,1),vel_cmd_previous(2,2),vel_cmd_previous(3,3),vel_cmd_previous(4,4),vel_cmd_previous(5,5);
+Eigen::Matrix<double,6,1> current_error=(goal_pose_ - previous_pose_);
+Eigen::Matrix<double,6,1> vdiff = (current_error - (goal_pose_ - vel_cm_previous_vec)); // Differential Part
+Eigen::Matrix<double,6,1> current_accum_error = (current_error + previous_accum_error); // Integral Part
+             Eigen::Matrix<double,6,6> vel_cmd_current=Kp*(goal_pose_-current_pose_).transpose() + Kd*vdiff.transpose() + Ki*current_accum_error.transpose();
+
+std::cout << "vdiff: " << vdiff.transpose() << std::endl;
+std::cout << "error: " << (goal_pose_-current_pose_).transpose() << std::endl;
+std::cout << "vel_cm_current: "<< vel_cmd_current.transpose() << std::endl;
+             vel_cmd_msg.linear.x=vel_cmd_current(0,0);
+             vel_cmd_msg.linear.y=vel_cmd_current(1,1);
+             vel_cmd_msg.linear.z=vel_cmd_current(2,2);
+             //vel_cmd_msg.angular.x=vel_cmd_current(3,3);
+             //vel_cmd_msg.angular.y=vel_cmd_current(4,4);
+             //vel_cmd_msg.angular.z=vel_cmd_current(5,5);
+             vel_cmd.publish(vel_cmd_msg);
+
+previous_accum_error=current_accum_error;
+vel_cmd_previous=vel_cmd_current;
         }
 
         previous_pose_=current_pose_;
@@ -227,18 +227,18 @@ void PositionCommand::getUpdatedPose(const visualeyez_tracker::TrackerPose::Cons
     if(!goal_)
     {
         vel_cmd.publish(vel_cmd_msg);
- 	return;
+  return;
     }
     if (base_marker_id_.compare(std::string(trackerPose->tracker_id)) == 0)
     //if(trackerPose->tracker_id==base_marker_id_)
     {
-    	ROS_INFO_STREAM(" Base Tracker");
+     ROS_INFO_STREAM(" Base Tracker");
         base_marker_position=Eigen::Vector3d(trackerPose->pose.x/1000.0f, trackerPose->pose.y/1000.0f, trackerPose->pose.z/1000.0f);
         got_base_marker_=true;
     }
     else// if(trackerPose->tracker_id==head_marker_id_)
     {
-    	ROS_INFO_STREAM(" Head Tracker");
+     ROS_INFO_STREAM(" Head Tracker");
         head_marker_position=Eigen::Vector3d(trackerPose->pose.x/1000.0f, trackerPose->pose.y/1000.0f, trackerPose->pose.z/1000.0f);
         got_head_marker_=true;
     }
@@ -246,14 +246,14 @@ void PositionCommand::getUpdatedPose(const visualeyez_tracker::TrackerPose::Cons
     // If both markers are available, do the control
     if(got_base_marker_ && got_head_marker_)
     {
-	if(count==0)
-	{
-	   ROS_INFO("entrou");
-    	   gettimeofday( &previous_time, NULL );
-	   ++count;
+if(count==0)
+{
+ROS_INFO("entrou");
+     gettimeofday( &previous_time, NULL );
+++count;
            return;
-	}
-	
+}
+
         // Define a local reference frame
         Eigen::Vector3d uav_x=(head_marker_position-base_marker_position).normalized(); // Heading
 
@@ -276,18 +276,18 @@ void PositionCommand::getUpdatedPose(const visualeyez_tracker::TrackerPose::Cons
                 pitch,
                 yaw;
 
-	std::cout << "current_pose: " << current_pose_ << std::endl;
-	std::cout << "goal_pose: " << goal_pose_ << std::endl;
+std::cout << "current_pose: " << current_pose_ << std::endl;
+std::cout << "goal_pose: " << goal_pose_ << std::endl;
 
         Eigen::Matrix<double,6,1> error=goal_pose_-current_pose_;
         // Check if goal was reached
         /*if(equalFloat(current_pose_(0,0), goal_pose_(0,0),epsilon) ||
-                equalFloat(current_pose_(1,0), goal_pose_(1,0),epsilon) ||
-                equalFloat(current_pose_(2,0), goal_pose_(2,0),epsilon) ||
-                equalFloat(current_pose_(3,0), goal_pose_(3,0),epsilon) ||
-                equalFloat(current_pose_(4,0), goal_pose_(4,0),epsilon) ||
-                equalFloat(current_pose_(5,0), goal_pose_(5,0),epsilon)
-                )*/
+equalFloat(current_pose_(1,0), goal_pose_(1,0),epsilon) ||
+equalFloat(current_pose_(2,0), goal_pose_(2,0),epsilon) ||
+equalFloat(current_pose_(3,0), goal_pose_(3,0),epsilon) ||
+equalFloat(current_pose_(4,0), goal_pose_(4,0),epsilon) ||
+equalFloat(current_pose_(5,0), goal_pose_(5,0),epsilon)
+)*/
         if(error.norm()<epsilon) // CHANGE THIS
         {
             ROS_INFO("Reached goal!");
@@ -296,46 +296,46 @@ void PositionCommand::getUpdatedPose(const visualeyez_tracker::TrackerPose::Cons
         }
         else //control
         {
-		struct timeval current_time;
-  	 	gettimeofday( &previous_time, NULL );
-	    
-            	ROS_INFO_STREAM("position error norm: "<< error.transpose().norm());
-  		//timespec current_time;
-    		//clock_gettime(CLOCK_MONOTONIC_RAW, &current_time);
-		//double period = (double) current_time.tv_sec + (double) 1e-6 * tv.tv_usec; 
+struct timeval current_time;
+   gettimeofday( &previous_time, NULL );
 
-    		//double period = (current_time.tv_sec - previous_time.tv_sec) + ((current_time.tv_usec - previous_time.tv_usec) / 1000000.0);
-		double period=0.020;
-		previous_time=current_time;
-	    	//std::cout << "time diff: " << period << std::endl;
+             ROS_INFO_STREAM("position error norm: "<< error.transpose().norm());
+   //timespec current_time;
+     //clock_gettime(CLOCK_MONOTONIC_RAW, &current_time);
+//double period = (double) current_time.tv_sec + (double) 1e-6 * tv.tv_usec;
 
-            	//Eigen::Matrix<double,6,6> vel_cmd_current=Kp*(goal_pose_-current_pose_).transpose() + Kd*(current_pose_-previous_pose_).transpose()*freq_;
-           	Eigen::Matrix<double,6,1> vel_cm_previous_vec;
-	    	vel_cm_previous_vec << vel_cmd_previous(0,0), vel_cmd_previous(1,1),vel_cmd_previous(2,2),vel_cmd_previous(3,3),vel_cmd_previous(4,4),vel_cmd_previous(5,5);
-	    	Eigen::Matrix<double,6,1> vdiff= ((goal_pose_ - previous_pose_) - (goal_pose_ - vel_cm_previous_vec));   // Differential Part
-            	Eigen::Matrix<double,6,6> vel_cmd_current=Kp*(goal_pose_-current_pose_).transpose() + Kd*vdiff.transpose();
+     //double period = (current_time.tv_sec - previous_time.tv_sec) + ((current_time.tv_usec - previous_time.tv_usec) / 1000000.0);
+double period=0.020;
+previous_time=current_time;
+//std::cout << "time diff: " << period << std::endl;
 
-		std::cout << "vdiff: "<<vdiff.transpose() << std::endl;
-		std::cout << "error: " << (goal_pose_-current_pose_).transpose() << std::endl;
-		std::cout << "vel_cm_current: "<<vel_cmd_current.transpose() << std::endl;
-            	vel_cmd_msg.linear.x=vel_cmd_current(0,0);
-            	vel_cmd_msg.linear.y=vel_cmd_current(1,1);
-            	vel_cmd_msg.linear.z=vel_cmd_current(2,2);
-            	//vel_cmd_msg.angular.x=vel_cmd_current(3,3);
-            	//vel_cmd_msg.angular.y=vel_cmd_current(4,4);
-            	//vel_cmd_msg.angular.z=vel_cmd_current(5,5);
-            	vel_cmd.publish(vel_cmd_msg);
-	    
-	    	vel_cmd_previous=vel_cmd_current;
+             //Eigen::Matrix<double,6,6> vel_cmd_current=Kp*(goal_pose_-current_pose_).transpose() + Kd*(current_pose_-previous_pose_).transpose()*freq_;
+            Eigen::Matrix<double,6,1> vel_cm_previous_vec;
+vel_cm_previous_vec << vel_cmd_previous(0,0), vel_cmd_previous(1,1),vel_cmd_previous(2,2),vel_cmd_previous(3,3),vel_cmd_previous(4,4),vel_cmd_previous(5,5);
+Eigen::Matrix<double,6,1> vdiff= ((goal_pose_ - previous_pose_) - (goal_pose_ - vel_cm_previous_vec)); // Differential Part
+             Eigen::Matrix<double,6,6> vel_cmd_current=Kp*(goal_pose_-current_pose_).transpose() + Kd*vdiff.transpose();
+
+std::cout << "vdiff: "<<vdiff.transpose() << std::endl;
+std::cout << "error: " << (goal_pose_-current_pose_).transpose() << std::endl;
+std::cout << "vel_cm_current: "<<vel_cmd_current.transpose() << std::endl;
+             vel_cmd_msg.linear.x=vel_cmd_current(0,0);
+             vel_cmd_msg.linear.y=vel_cmd_current(1,1);
+             vel_cmd_msg.linear.z=vel_cmd_current(2,2);
+             //vel_cmd_msg.angular.x=vel_cmd_current(3,3);
+             //vel_cmd_msg.angular.y=vel_cmd_current(4,4);
+             //vel_cmd_msg.angular.z=vel_cmd_current(5,5);
+             vel_cmd.publish(vel_cmd_msg);
+
+vel_cmd_previous=vel_cmd_current;
         }
 
         previous_pose_=current_pose_;
 
     }else
      {
-    	gettimeofday( &previous_time, NULL );
+     gettimeofday( &previous_time, NULL );
      }
-    
+
 }
 
 void PositionCommand::getGoal(const geometry_msgs::PoseStamped::ConstPtr & goal)
@@ -424,29 +424,29 @@ int main(int argc, char **argv)
     ros::Rate loop_rate(50);
     while (ros::ok())
     {
-	ros::spinOnce();
+ros::spinOnce();
 
         loop_rate.sleep();
     }
 
     return 0;
     /*//ros::Publisher uav_commands = n.advertise<pctx_control::Control>("sendPCTXControl", 1000);
-    //ros::Subscriber sub = n.subscribe("TrackerPosition", 1000, getUpdatedPose);
-    ros::Rate loop_rate(15);
-    int count = 0;
-    std::vector<int16_t> controlValues(9,0);
-    double k = 3;
-    while (ros::ok())
-    {
-        pctx_control::Control controlMessage;
-        int val = count%1020;//int(sin((count%180)*PI/180.0)*1020);
-        //controlValues[0] = controlValues[1] =controlValues[2] =controlValues[3] =controlValues[4] =controlValues[5] =controlValues[6] =controlValues[7] =controlValues[8] = val;
-        controlValues[0] = k*y;
-        controlMessage.values  = controlValues;
-        ROS_DEBUG("UAV_Commander broadcasting to all channels value:%d",controlValues[0]);
-        uav_commands.publish(controlMessage);
-        ros::spinOnce();
-        loop_rate.sleep();
-        count+=10;
-    }*/
+//ros::Subscriber sub = n.subscribe("TrackerPosition", 1000, getUpdatedPose);
+ros::Rate loop_rate(15);
+int count = 0;
+std::vector<int16_t> controlValues(9,0);
+double k = 3;
+while (ros::ok())
+{
+pctx_control::Control controlMessage;
+int val = count%1020;//int(sin((count%180)*PI/180.0)*1020);
+//controlValues[0] = controlValues[1] =controlValues[2] =controlValues[3] =controlValues[4] =controlValues[5] =controlValues[6] =controlValues[7] =controlValues[8] = val;
+controlValues[0] = k*y;
+controlMessage.values = controlValues;
+ROS_DEBUG("UAV_Commander broadcasting to all channels value:%d",controlValues[0]);
+uav_commands.publish(controlMessage);
+ros::spinOnce();
+loop_rate.sleep();
+count+=10;
+}*/
 }
