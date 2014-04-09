@@ -11,11 +11,8 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   nav_msgs
   std_msgs
-<<<<<<< HEAD
   dynamic_reconfigure
-=======
   visualeyez_tracker
->>>>>>> 4e7412f8dd18dea1d75db4990e47e595167bb17c
 )
 
 ## System dependencies are found with CMake's conventions
