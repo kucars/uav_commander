@@ -27,6 +27,7 @@
 #include "geometry_msgs/Pose.h"
 #include "geometry_msgs/Twist.h"
 #include "uav_commander/ControlInfo.h"
+#include "uav_commander/AllTopic.h"
 #include "nav_msgs/Odometry.h"
 #include <Eigen/Eigen>
 #include <std_msgs/String.h>
@@ -37,31 +38,14 @@
 #include <sstream>
 #include <sys/time.h>
 
-#define PI 3.14159265
-#define BILLION 1000000000
-
-double x,y,z;
-const double epsilon = 0.1;
-
-double Sat (double num, double Max , double Min);
-
-inline bool equalFloat(double a, double b, double epsilon)
-{
-    return fabs(a - b) < epsilon;
-}
-
 class PositionCommand
 {
-public: 
-
-    int     count;
-    bool    init_;
-    bool    control_;
-    bool    got_pose_update_;
-    bool    got_goal_;
-    double  period_;
-    bool    load_gains_;
-
+public:
+    geometry_msgs::Psoe pose_msg;
+    geometry_msgs::Psoe goal_msg;
+    geometry_msgs::Psoe current_error_msg;
+    geometry_msgs::Twist cmd_vel_msg;
+    uav_commander::ControlInfo control_info_msg;
     Eigen::Matrix<double,6,1> Kp;
     Eigen::Matrix<double,6,1> Kd;
     Eigen::Matrix<double,6,1> Ki;
@@ -78,9 +62,9 @@ public:
     ros::Publisher  vel_cmd;
     ros::Publisher  control_info_pub;
     ros::Publisher  current_error_pub ;
+    ros::Publisher  all_topic_pub;
     ros::Time       previous_time_;
-    geometry_msgs::PoseStamped Origin_;
-    uav_commander::ControlInfo control_info_msg;
+
 
     dynamic_reconfigure::Server<uav_commander::PIDControlConfig> server;
     dynamic_reconfigure::Server<uav_commander::PIDControlConfig>::CallbackType dynamic_function;
@@ -105,6 +89,7 @@ PositionCommand::PositionCommand(ros::NodeHandle & n) :
     vel_cmd             = n_.advertise <geometry_msgs::Twist       > ("/cmd_vel"      , 1);
     control_info_pub    = n_.advertise <uav_commander::ControlInfo > ("/control_info" , 1);
     current_error_pub   = n_.advertise <geometry_msgs::Pose        > ("/current_error", 1);
+    all_topic_pub       = n_.advertise <uav_commander::AllTopic    > ("/data", 1);
 
     Kp << 0 , 0 , 0 , 0 , 0 , 0;
     Ki << 0 , 0 , 0 , 0 , 0 , 0;
@@ -334,4 +319,6 @@ int main(int argc, char **argv)
 
     return 0;
 }
+
+
 
