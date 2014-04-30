@@ -16,8 +16,10 @@ find_package(catkin REQUIRED COMPONENTS
   visualeyez_tracker
   message_generation
   ardrone_autonomy
+  actionlib
+  actionlib_msgs
 )
-
+find_package(Boost REQUIRED COMPONENTS system)
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -52,25 +54,24 @@ find_package(catkin REQUIRED COMPONENTS
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-  add_message_files(
+add_message_files(
     FILES
     Gains.msg
     ControlInfo.msg
     AllTopic.msg
-  )
+)
 
 ## Generate services in the 'srv' folder
- add_service_files(
+add_service_files(
    FILES
    GoSrv.srv
- )
+)
 
 ## Generate actions in the 'action' folder
-# add_action_files(
-#   FILES
-#   Action1.action
-#   Action2.action
-# )
+add_action_files(
+  DIRECTORY action
+  FILES WayPoint.action
+)
 
 ## Generate added messages and services with any dependencies listed here
  generate_messages(
@@ -79,6 +80,7 @@ find_package(catkin REQUIRED COMPONENTS
    nav_msgs
    geometry_msgs
    ardrone_autonomy
+   actionlib_msgs
  )
 
 generate_dynamic_reconfigure_options(config/PIDControl.cfg)
@@ -96,7 +98,7 @@ generate_dynamic_reconfigure_options(config/PIDControl.cfg)
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES uav_commander
-   CATKIN_DEPENDS roscpp rospy std_msgs geometry_msgs message_runtime
+   CATKIN_DEPENDS roscpp rospy std_msgs geometry_msgs message_runtime actionlib_msgs
 #  DEPENDS system_lib
 )
 
@@ -110,6 +112,7 @@ catkin_package(
 include_directories(include
   ${catkin_INCLUDE_DIRS}
   ${Eigen_INCLUDE_DIRS}
+  ${Boost_INCLUDE_DIRS}
 )
 
 
@@ -126,6 +129,7 @@ add_executable(go_server src/GoServer.cpp)
 add_executable(go_client src/GoClient.cpp)
 add_executable(chirp_controler src/ChirpAndControl.cpp)
 add_executable(adaptive_control src/AdaptiveX.cpp)
+add_executable(way_point_client src/WayPointClient.cpp)
 
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
@@ -134,6 +138,7 @@ add_dependencies(position_controller uav_commander_generate_messages_cpp ${PROJE
 add_dependencies(chirp_goal_commander uav_commander_generate_messages_cpp)
 add_dependencies(chirp_controler uav_commander_generate_messages_cpp)
 add_dependencies(adaptive_control uav_commander_generate_messages_cpp)
+add_dependencies(way_point_client uav_commander_generate_messages_cpp)
 
 add_dependencies(go_server ${PROJECT_NAME}_gencfg)
 add_dependencies(go_client ${PROJECT_NAME}_gencfg)
@@ -146,6 +151,7 @@ target_link_libraries(chirp_controler ${catkin_LIBRARIES} -lpq )
 target_link_libraries(adaptive_control ${catkin_LIBRARIES} -lpq )
 target_link_libraries(go_server ${catkin_LIBRARIES} -lpq )
 target_link_libraries(go_client ${catkin_LIBRARIES} -lpq )
+target_link_libraries(way_point_client ${catkin_LIBRARIES} -lpq )
 
 #############
 ## Install ##
@@ -194,5 +200,3 @@ target_link_libraries(go_client ${catkin_LIBRARIES} -lpq )
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
-
-

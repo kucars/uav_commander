@@ -32,6 +32,8 @@
 #include <std_msgs/String.h>
 #include <dynamic_reconfigure/server.h>
 #include <uav_commander/PIDControlConfig.h>
+#include <actionlib/server/simple_action_server.h>
+#include <uav_commander/WayPointAction.h>
 //#include "pctx_control/Control.h"
 
 #include <sstream>
@@ -40,10 +42,28 @@
 #define PI 3.14159265
 #define BILLION 1000000000
 
+
 double x,y,z;
 const double epsilon = 0.1;
+double  eps = 0.1;
 
 double Sat (double num, double Max , double Min);
+bool error(const Eigen::Matrix<double,6,1> Pose, const Eigen::Matrix<double,6,1> Target);
+
+bool error(const Eigen::Matrix<double,6,1> Pose, const Eigen::Matrix<double,6,1> Target)
+{
+    Eigen::Matrix<double,6,1> Result;
+    double x,y,z,e;
+    x = Pose(0,0)-Target(0,0);
+    y = Pose(1,0)-Target(1,0);
+    z = Pose(2,0)-Target(2,0);
+    Result = Pose - Target;
+    e = sqrt(x*x+y*y+z*z);
+    if (e < eps)
+        return true;
+    else
+        return false;
+}
 
 inline bool equalFloat(double a, double b, double epsilon)
 {
@@ -61,7 +81,7 @@ public:
     bool    got_goal_;
     double  period_;
     bool    load_gains_;
-
+    bool    action_recived_;
     Eigen::Matrix<double,6,1> Kp;
     Eigen::Matrix<double,6,1> Kd;
     Eigen::Matrix<double,6,1> Ki;
@@ -79,36 +99,49 @@ public:
     ros::Publisher  control_info_pub;
     ros::Publisher  current_error_pub ;
     ros::Time       previous_time_;
-    geometry_msgs::PoseStamped Origin_;
+    geometry_msgs::PoseStamped C_Pose_;
     uav_commander::ControlInfo control_info_msg;
 
     dynamic_reconfigure::Server<uav_commander::PIDControlConfig> server;
     dynamic_reconfigure::Server<uav_commander::PIDControlConfig>::CallbackType dynamic_function;
 
-    PositionCommand(ros::NodeHandle & n);
+    actionlib::SimpleActionServer <uav_commander::WayPointAction> as_;
+    uav_commander::WayPointFeedback feedback_;
+    uav_commander::WayPointResult   result_;
+    std::string action_name_;
+
+    PositionCommand(ros::NodeHandle & n,std::string name);
     void control();
 
 private:
     void getGoal   (const  geometry_msgs::PoseStamped::ConstPtr    & goal);
     void getPose   (const  geometry_msgs::PoseStamped::ConstPtr    & Pose);
-    void dynamic   (       uav_commander::PIDControlConfig         &config, uint32_t level);
+    void dynamic   (       uav_commander::PIDControlConfig         & config, uint32_t level);
+    void goalCB    ();
 
 };
 
-PositionCommand::PositionCommand(ros::NodeHandle & n) :
-    n_(n), control_(false), init_(true)
+PositionCommand::PositionCommand(ros::NodeHandle & n,std::string name) :
+    n_(n), control_(false), init_(true),
+    action_name_(name),
+    as_(n, name, false)
 {
     ROS_INFO("initialization");
 
-    pose_sub            = n_.subscribe("/uav/pose" , 1, &PositionCommand::getPose   , this);
-    goal_sub            = n_.subscribe("/uav/goal" , 1, &PositionCommand::getGoal   , this);
+    pose_sub            = n_.subscribe("pose" , 1, &PositionCommand::getPose   , this);
+    goal_sub            = n_.subscribe("goal" , 1, &PositionCommand::getGoal   , this);
     vel_cmd             = n_.advertise <geometry_msgs::Twist       > ("/cmd_vel"      , 1);
     control_info_pub    = n_.advertise <uav_commander::ControlInfo > ("/control_info" , 1);
     current_error_pub   = n_.advertise <geometry_msgs::Pose        > ("/current_error", 1);
 
-    Kp << 0 , 0 , 0 , 0 , 0 , 0;
-    Ki << 0 , 0 , 0 , 0 , 0 , 0;
-    Kd << 0 , 0 , 0 , 0 , 0 , 0;
+    //register the goal and feeback callbacks
+    as_.registerGoalCallback   (boost::bind(&PositionCommand::goalCB, this));
+    as_.start();
+
+    ROS_INFO("START");
+    Kp << 0.5  , 0.5  , 0.5  , 0 , 0 , 0.5 ;
+    Ki << 0.02 , 0.02 , 0.02 , 0 , 0 , 0.02;
+    Kd << 0.3  , 0.3  , 0.3  , 0 , 0 , 0.3;
 
     previous_error_  << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
     accum_error_     << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
@@ -125,11 +158,25 @@ void PositionCommand::control()
     geometry_msgs::Pose         current_error_msg ;
     Eigen::Matrix<double,6,1>   current_error;
 
-    current_error= goal_pose_ - current_pose_;
+    if (action_recived_)
+    {
+        feedback_.pose = C_Pose_;
+        as_.publishFeedback(feedback_);
+
+        if(error(current_pose_,goal_pose_))
+        {
+            result_.pose = feedback_.pose;
+            ROS_INFO("%s: Succeeded", action_name_.c_str());
+            as_.setSucceeded(result_);
+            action_recived_ = false;
+        }
+    }
+
+    current_error = goal_pose_ - current_pose_;
     if (control_)
     {
         // if the error is less than epsilon goal is reached
-        if(current_error.norm() < .1)
+        if(error(current_pose_,goal_pose_))
         {
             ROS_INFO("Reached goal!");
         }
@@ -178,11 +225,11 @@ void PositionCommand::control()
               << " w = "    <<  current_error(5,0)
               << std::endl;
 
-//    std::cout << "AE: x ="  <<  accum_error_(0,0)
-//              << " y = "    <<  accum_error_(1,0)
-//              << " z = "    <<  accum_error_(2,0)
-//             << " w = "    <<  accum_error_(5,0)
-//              << std::endl;
+    //    std::cout << "AE: x ="  <<  accum_error_(0,0)
+    //              << " y = "    <<  accum_error_(1,0)
+    //              << " z = "    <<  accum_error_(2,0)
+    //             << " w = "    <<  accum_error_(5,0)
+    //              << std::endl;
 
     std::cout << "Kp = "  << Kp.transpose()<< std::endl;
     std::cout << "Ki = "  << Ki.transpose()<< std::endl;
@@ -235,12 +282,12 @@ void PositionCommand::getPose(const geometry_msgs::PoseStamped::ConstPtr & Pose)
     control_info_msg.header.stamp   = current_time;
     control_info_pub.publish(control_info_msg);
 
-//    std::cout << "CP: x = " <<  current_pose_(0,0)
-//              << " y = "    <<  current_pose_(1,0)
-//              << " z = "    <<  current_pose_(2,0)
-//              << " w = "    <<  current_pose_(5,0)
-//              << std::endl;
-//    std::cout << "Period ="  <<  period_ << std::endl;
+    //    std::cout << "CP: x = " <<  current_pose_(0,0)
+    //              << " y = "    <<  current_pose_(1,0)
+    //              << " z = "    <<  current_pose_(2,0)
+    //              << " w = "    <<  current_pose_(5,0)
+    //              << std::endl;
+    //    std::cout << "Period ="  <<  period_ << std::endl;
 }
 
 void PositionCommand::getGoal(const geometry_msgs::PoseStamped::ConstPtr & goal)
@@ -316,6 +363,31 @@ void PositionCommand::dynamic(uav_commander::PIDControlConfig &config, uint32_t 
     control_info_msg.Kd.p = 0 ;
     control_info_msg.Kd.w = config.Kd_w ;
 }
+void PositionCommand::goalCB()
+{
+    geometry_msgs::PoseStamped Goal;
+    Goal = as_.acceptNewGoal()->goal;
+    Eigen::Matrix<double,3,1> euler = Eigen::Quaterniond(Goal.pose.orientation.w,
+                                                         Goal.pose.orientation.x,
+                                                         Goal.pose.orientation.y,
+                                                         Goal.pose.orientation.z).matrix().eulerAngles(2, 1, 0);
+    double yaw   = euler(0,0);
+    double pitch = euler(1,0);
+    double roll  = euler(2,0);
+
+    goal_pose_ <<   Goal.pose.position.x,
+            Goal.pose.position.y,
+            Goal.pose.position.z,
+            roll,
+            pitch,
+            yaw;
+
+    ROS_INFO("GOT NEW GOAL from Action client");
+    std::cout << "goal_pose: " << goal_pose_.transpose()<< std::endl;
+
+    action_recived_ = true;
+    return;
+}
 
 int main(int argc, char **argv)
 {
@@ -323,11 +395,12 @@ int main(int argc, char **argv)
     ros::NodeHandle n;
 
     ros::Rate       loop_rate(40);
-    PositionCommand position_commander(n);
+    PositionCommand position_commander(n,ros::this_node::getName());
 
     while (ros::ok())
     {
         position_commander.control();
+
         ros::spinOnce();
         loop_rate.sleep();
     }
