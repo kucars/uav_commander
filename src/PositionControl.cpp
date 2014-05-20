@@ -21,6 +21,8 @@
 **********************************************************************************************/
 #include "ros/ros.h"
 #include "std_msgs/String.h"
+#include "std_msgs/Empty.h"
+
 #include "std_msgs/Float64MultiArray.h"
 #include "visualeyez_tracker/TrackerPose.h"
 #include "geometry_msgs/PoseStamped.h"
@@ -34,6 +36,7 @@
 #include <uav_commander/PIDControlConfig.h>
 #include <actionlib/server/simple_action_server.h>
 #include <uav_commander/WayPointAction.h>
+
 //#include "pctx_control/Control.h"
 
 #include <sstream>
@@ -41,34 +44,10 @@
 
 #define PI 3.14159265
 #define BILLION 1000000000
-
-
-double x,y,z;
-const double epsilon = 0.1;
-double  eps = 0.1;
+double EPS = 0.1;
 
 double Sat (double num, double Max , double Min);
 bool error(const Eigen::Matrix<double,6,1> Pose, const Eigen::Matrix<double,6,1> Target);
-
-bool error(const Eigen::Matrix<double,6,1> Pose, const Eigen::Matrix<double,6,1> Target)
-{
-    Eigen::Matrix<double,6,1> Result;
-    double x,y,z,e;
-    x = Pose(0,0)-Target(0,0);
-    y = Pose(1,0)-Target(1,0);
-    z = Pose(2,0)-Target(2,0);
-    Result = Pose - Target;
-    e = sqrt(x*x+y*y+z*z);
-    if (e < eps)
-        return true;
-    else
-        return false;
-}
-
-inline bool equalFloat(double a, double b, double epsilon)
-{
-    return fabs(a - b) < epsilon;
-}
 
 class PositionCommand
 {
@@ -76,7 +55,7 @@ public:
 
     int     count;
     bool    init_;
-    bool    control_;
+    bool    control_,control_gui_enable_;
     bool    got_pose_update_;
     bool    got_goal_;
     double  period_;
@@ -98,6 +77,7 @@ public:
     ros::Publisher  vel_cmd;
     ros::Publisher  control_info_pub;
     ros::Publisher  current_error_pub ;
+    ros::Publisher  takeoff_pub,land_pub,reset_pub;
     ros::Time       previous_time_;
     geometry_msgs::PoseStamped C_Pose_;
     uav_commander::ControlInfo control_info_msg;
@@ -117,6 +97,7 @@ private:
     void getGoal   (const  geometry_msgs::PoseStamped::ConstPtr    & goal);
     void getPose   (const  geometry_msgs::PoseStamped::ConstPtr    & Pose);
     void dynamic   (       uav_commander::PIDControlConfig         & config, uint32_t level);
+
     void goalCB    ();
 
 };
@@ -128,20 +109,23 @@ PositionCommand::PositionCommand(ros::NodeHandle & n,std::string name) :
 {
     ROS_INFO("initialization");
 
-    pose_sub            = n_.subscribe("pose" , 1, &PositionCommand::getPose   , this);
-    goal_sub            = n_.subscribe("goal" , 1, &PositionCommand::getGoal   , this);
-    vel_cmd             = n_.advertise <geometry_msgs::Twist       > ("/cmd_vel"      , 1);
-    control_info_pub    = n_.advertise <uav_commander::ControlInfo > ("/control_info" , 1);
-    current_error_pub   = n_.advertise <geometry_msgs::Pose        > ("/current_error", 1);
+    pose_sub            = n_.subscribe("pose"   , 1, &PositionCommand::getPose   , this);
+    goal_sub            = n_.subscribe("goal"   , 1, &PositionCommand::getGoal   , this);
+    vel_cmd             = n_.advertise <geometry_msgs::Twist       > ("/cmd_vel"        , 1);
+    control_info_pub    = n_.advertise <uav_commander::ControlInfo > ("/control_info"   , 1);
+    current_error_pub   = n_.advertise <geometry_msgs::Pose        > ("/current_error"  , 1);
+    takeoff_pub         = n_.advertise <std_msgs::Empty            > ("/ardrone/takeoff"        , 1);
+    land_pub            = n_.advertise <std_msgs::Empty            > ("/ardrone/land"           , 1);
+    reset_pub            = n_.advertise <std_msgs::Empty            > ("/ardrone/reset"         , 1);
 
     //register the goal and feeback callbacks
     as_.registerGoalCallback   (boost::bind(&PositionCommand::goalCB, this));
     as_.start();
 
     ROS_INFO("START");
-    Kp << 0.5  , 0.5  , 0.5  , 0 , 0 , 0.5 ;
-    Ki << 0.02 , 0.02 , 0.02 , 0 , 0 , 0.02;
-    Kd << 0.3  , 0.3  , 0.3  , 0 , 0 , 0.3;
+    Kp << 0.5  , 0.5  , 0.5  , 0 , 0 , 0 ;
+    Ki << 0.02 , 0.02 , 0.02 , 0 , 0 , 0;
+    Kd << 0.3  , 0.3  , 0.3  , 0 , 0 , 0;
 
     previous_error_  << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
     accum_error_     << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
@@ -173,23 +157,13 @@ void PositionCommand::control()
     }
 
     current_error = goal_pose_ - current_pose_;
-    if (control_)
+    if (control_ && control_gui_enable_ )
     {
-        // if the error is less than epsilon goal is reached
-        if(error(current_pose_,goal_pose_))
-        {
-            ROS_INFO("Reached goal!");
-        }
-
         accum_error_ = accum_error_+ period_*(current_error + previous_error_)/2.0;
 
         Eigen::Matrix<double,6,6> Cp = Kp * current_error.transpose();
         Eigen::Matrix<double,6,6> Ci = Ki * accum_error_.transpose();
         Eigen::Matrix<double,6,6> Cd = Kd * (current_error - previous_error_).transpose()/period_;
-
-        //std::cout << "Cp ="  <<  Cp << std::endl;
-        //std::cout << "Ci ="  <<  Ci << std::endl;
-        //std::cout << "Cd ="  <<  Cd << std::endl;
 
         Eigen::Matrix<double,6,6> vel_cmd_current = Cp + Ci + Cd ;
         Eigen::Matrix<double,3,1> linear_vel_cmd_l_frame;
@@ -206,7 +180,7 @@ void PositionCommand::control()
         vel_cmd_msg.angular.z = Sat(vel_cmd_current(5,5),1,-1);
 
         previous_error_     = current_error;
-        control_            = true;
+        control_            = false;
     }
 
     current_error_msg.position.x    = current_error(0,0);
@@ -224,16 +198,6 @@ void PositionCommand::control()
               << " z = "    <<  current_error(2,0)
               << " w = "    <<  current_error(5,0)
               << std::endl;
-
-    //    std::cout << "AE: x ="  <<  accum_error_(0,0)
-    //              << " y = "    <<  accum_error_(1,0)
-    //              << " z = "    <<  accum_error_(2,0)
-    //             << " w = "    <<  accum_error_(5,0)
-    //              << std::endl;
-
-    std::cout << "Kp = "  << Kp.transpose()<< std::endl;
-    std::cout << "Ki = "  << Ki.transpose()<< std::endl;
-    std::cout << "Kd = "  << Kd.transpose()<< std::endl;
 
     std::cout << "vel: x =" <<  vel_cmd_msg.linear.x
               << " y = "    <<  vel_cmd_msg.linear.y
@@ -281,13 +245,6 @@ void PositionCommand::getPose(const geometry_msgs::PoseStamped::ConstPtr & Pose)
     control_info_msg.Period         = period_;
     control_info_msg.header.stamp   = current_time;
     control_info_pub.publish(control_info_msg);
-
-    //    std::cout << "CP: x = " <<  current_pose_(0,0)
-    //              << " y = "    <<  current_pose_(1,0)
-    //              << " z = "    <<  current_pose_(2,0)
-    //              << " w = "    <<  current_pose_(5,0)
-    //              << std::endl;
-    //    std::cout << "Period ="  <<  period_ << std::endl;
 }
 
 void PositionCommand::getGoal(const geometry_msgs::PoseStamped::ConstPtr & goal)
@@ -313,15 +270,10 @@ void PositionCommand::getGoal(const geometry_msgs::PoseStamped::ConstPtr & goal)
 
 }
 
-double Sat (double num, double Max , double Min){
-    if (num > Max)      {num = Max;}
-    else if (num < Min) {num = Min;}
-    return num;
-}
 
 void PositionCommand::dynamic(uav_commander::PIDControlConfig &config, uint32_t level)
 {
-    if (config.PID_Control)
+    if (config.Load_PID)
     {
         ros::NodeHandle n_priv("~");
         n_priv.param<double>("kp_x" , config.Kp_x , 0.71);
@@ -336,31 +288,61 @@ void PositionCommand::dynamic(uav_commander::PIDControlConfig &config, uint32_t 
         n_priv.param<double>("kd_y" , config.Kd_y , 0.72);
         n_priv.param<double>("kd_z" , config.Kd_z , 0.73);
         n_priv.param<double>("kd_w" , config.Kd_w , 0.74);
+        config.Load_PID = 0;
     }
-    config.PID_Control = 0;
-    Kp << config.Kp_x , config.Kp_y , config.Kp_z , 0 , 0 , config.Kp_w;
-    Ki << config.Ki_x , config.Ki_y , config.Ki_z , 0 , 0 , config.Ki_w;
-    Kd << config.Kd_x , config.Kd_y , config.Kd_z , 0 , 0 , config.Kd_w;
+    if (config.PID_Control)
+        control_gui_enable_ = true;
+    else
+        control_gui_enable_ = false;
+
+    if (config.Take_off)
+    {
+        std_msgs::Empty msg;
+        takeoff_pub.publish(msg);
+        config.Take_off    = 0;
+    }
+    if (config.Land)
+    {
+        std_msgs::Empty msg;
+        land_pub.publish(msg);
+        config.Land    = 0;
+    }
+    if (config.Reset)
+    {
+        std_msgs::Empty msg;
+        reset_pub.publish(msg);
+        config.Reset    = 0;
+    }
+    if (config.Send_Position)
+    {
+        goal_pose_ <<   config.X_Position,
+                config.Y_Position,
+                config.Z_Position,
+                0,
+                0,
+                0;
+        config.Send_Position = 0;
+        ROS_INFO("GOT NEW GOAL FROM THE GUI");
+        std::cout << "goal_pose: " << goal_pose_.transpose()<< std::endl;
+    }
+
+    Kp << config.Kp_x , config.Kp_y , config.Kp_z , 0 , 0, config.Kp_w;
+    Ki << config.Ki_x , config.Ki_y , config.Ki_z , 0 , 0, config.Ki_w;
+    Kd << config.Kd_x , config.Kd_y , config.Kd_z , 0 , 0, config.Kd_w;
 
     control_info_msg.Kp.x = config.Kp_x ;
     control_info_msg.Kp.y = config.Kp_y ;
     control_info_msg.Kp.z = config.Kp_z ;
-    control_info_msg.Kp.r = 0 ;
-    control_info_msg.Kp.p = 0 ;
     control_info_msg.Kp.w = config.Kp_w ;
 
     control_info_msg.Ki.x = config.Ki_x ;
     control_info_msg.Ki.y = config.Ki_y ;
     control_info_msg.Ki.z = config.Ki_z ;
-    control_info_msg.Ki.r = 0 ;
-    control_info_msg.Ki.p = 0 ;
     control_info_msg.Ki.w = config.Ki_w ;
 
     control_info_msg.Kd.x = config.Kd_x ;
     control_info_msg.Kd.y = config.Kd_y ;
     control_info_msg.Kd.z = config.Kd_z ;
-    control_info_msg.Kd.r = 0 ;
-    control_info_msg.Kd.p = 0 ;
     control_info_msg.Kd.w = config.Kd_w ;
 }
 void PositionCommand::goalCB()
@@ -388,6 +370,25 @@ void PositionCommand::goalCB()
     action_recived_ = true;
     return;
 }
+double Sat (double num, double Max , double Min){
+    if (num > Max)      {num = Max;}
+    else if (num < Min) {num = Min;}
+    return num;
+}
+bool error(const Eigen::Matrix<double,6,1> Pose, const Eigen::Matrix<double,6,1> Target)
+{
+    double x,y,z,e;
+    x = Pose(0,0)-Target(0,0);
+    y = Pose(1,0)-Target(1,0);
+    z = Pose(2,0)-Target(2,0);
+    e = sqrt(x*x+y*y+z*z);
+    if (e < EPS)
+        return true;
+    else
+        return false;
+}
+
+
 
 int main(int argc, char **argv)
 {

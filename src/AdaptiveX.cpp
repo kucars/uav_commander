@@ -31,6 +31,7 @@
 #include "uav_commander/ControlInfo.h"
 #include "nav_msgs/Odometry.h"
 #include <Eigen/Eigen>
+#include <Eigen/Geometry>
 #include <std_msgs/String.h>
 #include <dynamic_reconfigure/server.h>
 #include <uav_commander/PIDControlConfig.h>
@@ -45,8 +46,8 @@
 const double epsilon = 0.1;
 
 double Sat (double num, double Max , double Min);
-double integration (double y, double ydot , double period );
-
+//double integration (double y, double ydot , double period );
+double filter (double lmdaf,double yf,double u, double period);
 inline bool equalFloat(double a, double b, double epsilon)
 {
     return fabs(a - b) < epsilon;
@@ -63,17 +64,15 @@ public:
     bool    Got_IMU_;
     bool    Update_Goal_;
     bool    Adaptive_;
-    double  a2b_,duration_,b_,c_;
-    double  a0est_,a1est_,a2est_,previous_velocity_;
-
+    double  a2b_,duration_,b_,c_,C1,C2;
 
     Eigen::Matrix<double,6,1> goal_pose_, current_pose_, previous_pose_, accum_error_, previous_error_;
     Eigen::Matrix<double,3,3> rot_matrix_;
-    Eigen::Matrix<double,3,1> acceleration_, velocity_;
+    Eigen::Matrix<double,3,1> acceleration_, velocity_,W_,Aest_dot_,Aest_,sf_,sf_dot_;
     Eigen::Matrix<double,6,1> Kp_, Kd_, Ki_;
-    Eigen::Matrix<double,3,1> x_, x_dot_,B_;
-    Eigen::Matrix<double,3,3> A_;
-
+    Eigen::Matrix<double,2,1> xm_, xm_dot_,Bm_;
+    Eigen::Matrix<double,2,2> Am_;
+    Eigen::Matrix<double,3,3> P_,P_dot_;
     ros::NodeHandle n_;
     ros::Subscriber goal_sub, pose_sub, nav_sub, adaptive_enable_sub;
     ros::Publisher  vel_cmd, control_info_pub,current_error_pub ;
@@ -113,23 +112,23 @@ PositionCommand::PositionCommand(ros::NodeHandle & n) :
     Kd_ << 0.3 , 0.3 , 0.3 , 0.0, 0.0, 0.0;
     Adaptive_ = false;
     Update_Goal_ = false;
-    a0est_ = 0;
-    a1est_ = 0;
-    a2est_ = 0;
-    x_      << 0.0,0.0,0.0;
 
     double  po,zeta,wn,ts;
     po     = 15.0;
     ts     = 5.0;
     zeta   = sqrt(log(po/100.0)*log(po/100.0)/(PI*PI+log(po/100.0)*log(po/100.0)));
     wn     = 4.0/(ts*zeta);
-    A_ <<   0.0, 1.0  , 0.0      ,
-            0.0, 0.0  , 1.0      ,
-            0.0,-wn*wn,-2*zeta*wn;
-    B_ <<   0.0  ,
-            0.0  ,
-            wn*wn;
-    previous_velocity_ = 0;
+    Am_ <<  0.0  , 1.0, -wn*wn,-2*zeta*wn;
+    Bm_ <<  0.0  , wn*wn;
+    //Aest_       << 0.58 , 0.14 , -0.21;
+    Aest_       << 1.0 , 1.0 , 1.0;
+    Aest_       <<  0.00542645 ,0.0103635 , 0.784819;
+    Aest_dot_   << 0.0 , 0.0 , 0.0;
+    sf_         << 0.0 , 0.0 , 0.0;
+    sf_dot_     << 0.0 , 0.0 , 0.0;
+    P_          << 1.0 , 0.0 , 0.0 ,0.0 , 1.0 , 0.0 ,0.0 , 0.0 , 1.0;
+    P_dot_      << 0.0 , 0.0 , 0.0 ,0.0 , 0.0 , 0.0 ,0.0 , 0.0 , 0.0;
+    ROS_INFO("initialization");
     return;
 }
 
@@ -145,18 +144,17 @@ void PositionCommand::control()
 
     double  error, error_dot, s, yr, l, k, gama,
             a0est_dot,a1est_dot,a2est_dot,
-            ym,ym_dot,ym_ddot,ym_dddot,
-            r,yp, yp_dot, yp_ddot;
-
+            ym,ym_dot,ym_ddot,
+            r,yp, yp_dot;
     if (control_)
     {
         //////////////////////////////////////////////////////////////////////////////////////////////
         // PID Control algorithm:
-        accum_error_ = accum_error_+ period_*(current_error + previous_error_)/2.0;
-        accum_error_sat(0,0) = Sat(accum_error_(0,0),max_I,min_I);
-        accum_error_sat(1,0) = Sat(accum_error_(1,0),max_I,min_I);
-        accum_error_sat(2,0) = Sat(accum_error_(2,0),max_I,min_I);
-        accum_error_sat(5,0) = Sat(accum_error_(5,0),max_I,min_I);
+        accum_error_            = accum_error_+ period_*(current_error + previous_error_)/2.0;
+        accum_error_sat(0,0)    = Sat(accum_error_(0,0),max_I,min_I);
+        accum_error_sat(1,0)    = Sat(accum_error_(1,0),max_I,min_I);
+        accum_error_sat(2,0)    = Sat(accum_error_(2,0),max_I,min_I);
+        accum_error_sat(5,0)    = Sat(accum_error_(5,0),max_I,min_I);
 
         Eigen::Matrix<double,6,6> Cp = Kp_ * current_error.transpose();
         Eigen::Matrix<double,6,6> Ci = Ki_ * accum_error_sat.transpose();
@@ -171,101 +169,116 @@ void PositionCommand::control()
         Eigen::Matrix<double,3,1> linear_vel_cmd_g_frame = rot_matrix_.inverse() * linear_vel_cmd_l_frame;
         //////////////////////////////////////////////////////////////////////////////////////////////
 
-        //ros::Time curr_time = ros::Time::now();
-        //      time = ros::Time::now().toSec() - time0_.toSec();
-        //        if(Update_Goal_)
-        //        {
-        //            yd      =   a2b_*b_*time*time + b_*time + c_;
-        //            yd_dot  = 2*a2b_*b_*time      + b_;
-        //            yd_ddot = 2*a2b_*b_;
-
-        //            std::cout   << "yd = "          << yd
-        //                        << "\tyd_dot = "    << yd_dot
-        //                        << "\tyd_ddot = "   << yd_ddot
-        //                        << std::endl;
-        //            if (time >= duration_)
-        //            {
-        //                Update_Goal_ = false;
-        //                yd      = a2b_*b_*duration_*duration_ + b_*duration_ + c_;
-        //                yd_dot  = 0;
-        //                yd_ddot = 0;
-        //            }
-        //        }
-
         if (Adaptive_)
         {
-            Eigen::Matrix<double,1,3> G;
-            G << 10.0 ,5.582 ,1.5317;
-            k = 1;
-            l = 1;
-            gama = 1;
-            ROS_INFO("------------------------------------------------");
-            r = goal_pose_(0,0);
-            r = G(0,0) * r - G*x_;
-            r = Sat(r,0.2,-0.2);
-            x_dot_ = A_*x_ + B_*r;
-            x_(0,0)     = integration (x_(0,0) , x_dot_(0,0)  , period_ );
-            x_(1,0)     = integration (x_(1,0) , x_dot_(1,0)  , period_ );
-            x_(2,0)     = integration (x_(2,0) , x_dot_(2,0)  , period_ );
-            ym          = x_(0,0);      // position
-            ym_dot      = x_(1,0);      // velocity
-            ym_ddot     = x_(2,0);      // acceleration
-            ym_dddot    = x_dot_(2,0);  // acceleration dot
-            yp          = current_pose_ (0,0);// position
-            yp_dot      = velocity_     (0,0);// velocity
-            yp_ddot     = acceleration_ (0,0);// acceleration
 
+            double k=3.0, l=2.0 , gama=1.0, k0=5.0 , lmda0=10.0 , lf=1.0, u=0.0 , e=0.0, lamda_t=0.0 , SEnable=0.0;
+            Eigen::Matrix<double,2,1> xm_dot_new;
+            Eigen::Matrix<double,3,3> Af,Bf,P_dot_new;
+            Eigen::Matrix<double,3,1> YP,W,Phi,Aest_dot_new,sf_dot_new;
+            Af << -lf , 0.0 , 0.0 ,0.0 , -lf , 0.0 ,0.0 , 0.0 , -lf;
+            Bf <<  lf , 0.0 , 0.0 ,0.0 ,  lf , 0.0 ,0.0 , 0.0 ,  lf;
+            ROS_INFO("--------------- Adaptive ---------------------");
+            double G[] = {10.0 ,5.582 ,1.5317};
+            r = goal_pose_(2,0);
+            r = G[0] * r - G[0]*current_pose_ (2,0) - G[1]*velocity_ (2,0) - G[2]*acceleration_(2,0);
+            r = Sat(r,0.5,-0.5);
+            //            if (C2 < 5)
+            //            {
+            //                if (C1 > 80)
+            //                {
+            //                    C1 = 0.0;
+            //                    C2++;
+            //                }
+            //                else
+            //                    C1++;
+            //                if (C1 < 40)
+            //                    r =  0.1;
+            //                else
+            //                    r = -0.1;
+            //            }
+            //            else
+            //                r = Sat(goal_pose_(0,0),0.2,-0.2);
 
-//            double current_velocity = (current_pose_ (0,0)-previous_pose_(0,0)/period_);
-//            yp_dot      = current_velocity;
-//            yp_ddot     =(current_velocity-previous_velocity_/period_);
-//            previous_velocity_ = current_velocity;
-
-            error       = yp_dot    - ym_dot;
-            error_dot   = yp_ddot   - ym_ddot;
+            // Refernce Model:-------------------------------------------------------------------------------
+            xm_dot_new  = Am_*xm_ + Bm_*r;
+            xm_         =     xm_ + period_*(xm_dot_new + xm_dot_)/2.0;
+            xm_dot_     = xm_dot_new;
+            ym          = xm_(0,0);             // velocity
+            ym_dot      = xm_(1,0);             // acceleration
+            ym_ddot     = xm_dot_(1,0);         // acceleration dot
+            yp          = velocity_     (2,0);  // velocity
+            yp_dot      = acceleration_ (2,0);  // acceleration
+            // Error:----------------------------------------------------------------------------------------
+            error       = yp        - ym;
+            error_dot   = yp_dot    - ym_dot;
             s           = error_dot + l*error;
-            yr          = ym_dddot  - l*error_dot;
-
+            yr          = ym_ddot   - l*error_dot;
+            // Robustness : ---------------------------------------------------------------------------------
+            //s = SEnable*s;
             if (fabs(s) < 0.1)
                 s = 0;
 
             if (fabs(error) < 0.1)
-                yp_dot = ym_dot;
+                yp = ym;
 
             if (fabs(error_dot) < 0.1)
-                yp_ddot = ym_ddot;
+                yp_dot = ym_dot;
 
-            a0est_dot = - gama * s * yr;
-            a1est_dot = - gama * s * yp_ddot;
-            a2est_dot = - gama * s * yp_dot;
-            a0est_ = integration (a0est_, a0est_dot , period_ );
-            a1est_ = integration (a1est_, a1est_dot , period_ );
-            a2est_ = integration (a2est_, a2est_dot , period_ );
+            //if (fabs(error_dot) < 0.1)
+            //    yr = ym_ddot;
+            // Filter : -------------------------------------------------------------------------------------
+            //            YP << yp,yp_dot,u;
+            //            sf_dot_new  = Af * sf_ + Bf * YP;
+            //            sf_         = sf_ + period_*(sf_dot_new + sf_dot_)/2.0;
+            //            sf_dot_     = sf_dot_new;
+            //            // Indirect Adaptive : --------------------------------------------------------------------------
+            //            W << lf *(yp_dot - sf_(1,0)),sf_(1,0),sf_(0,0);
+            //            e = W.transpose()* Aest_ - sf_(2,0);
+            //            // Calculate P matrix : -------------------------------------------------------------------------
+            //            lamda_t     = lmda0 *(1 - P_.norm()/k0) ;
+            //            P_dot_new   = lamda_t*P_ - P_*( W * W.transpose() ) * P_;
+            //            P_          = P_ + + period_*(P_dot_new + P_dot_)/2.0;
+            //            P_dot_      = P_dot_new;
+            // Adaptive law : -------------------------------------------------------------------------------
+            Phi  << yr , yp_dot , yp;
+            //Aest_dot_new = - gama * P_ * ( (Phi * s) + ( W * e ));
+            Aest_dot_new = - gama * P_ * (Phi * s);
+            Aest_  = Aest_ + period_*(Aest_dot_new + Aest_dot_)/2.0;
+            Aest_dot_ = Aest_dot_new;
+            // Control law : --------------------------------------------------------------------------------
+            u = Aest_.transpose() * Phi - k * s;
+            linear_vel_cmd_g_frame(2,0) = Sat(u,1,-1);
+            if (Sat(u,1,-1)== u )
+                SEnable = 1.0;
+            else
+                SEnable = 0.0;
+            // Finish Adaptive Control
+            //----------------------------------------------------------------------------------------------
 
-            linear_vel_cmd_g_frame(0,0) = a0est_*yr + a1est_*yp_ddot + a2est_*yp_dot - k*s;
-
-            current_error_msg.position.x    = a0est_;//current_error(0,0);
-            current_error_msg.position.y    = a1est_;//current_error(1,0);
-            current_error_msg.position.z    = a2est_;//current_error(2,0);
+            current_error_msg.position.x    = Aest_(0,0);//current_error(0,0);
+            current_error_msg.position.y    = Aest_(1,0);//current_error(1,0);
+            current_error_msg.position.z    = Aest_(2,0);//current_error(2,0);
             current_error_msg.orientation.x = ym;//current_error(0,0);
-            current_error_msg.orientation.y = s;//current_error(1,0);
+            current_error_msg.orientation.y = r;//current_error(1,0);
             current_error_msg.orientation.z = error;//current_error(2,0);
-            current_error_msg.orientation.w = k*s;//current_error(2,0);
-
-            current_error_pub.publish(current_error_msg);
-
-            std::cout << "CE: ym ="     <<  ym
-                      << " a0est_ = "   <<  a0est_
-                      << " a1est_ = "   <<  a1est_
-                      << " a2est_ = "   <<  a2est_
+            current_error_msg.orientation.w = acceleration_ (0,0);//current_error(2,0);
+            std::cout << " ym ="     <<  ym
+                      << " r = "     <<  r
+                      << " error = " <<  error
+                      << " s = "     <<  s
+                      << " u = "     <<  u
+                      << " A0 = "    <<  Aest_(0,0)
+                      << " A1 = "    <<  Aest_(1,0)
+                      << " A2 = "    <<  Aest_(2,0)
                       << std::endl;
-
+            current_error_pub.publish(current_error_msg);
         }
 
-        vel_cmd_msg.linear.x  = Sat(linear_vel_cmd_g_frame(0,0),1,-1);
-        vel_cmd_msg.linear.y  = Sat(linear_vel_cmd_g_frame(1,0),1,-1);
-        vel_cmd_msg.linear.z  = Sat(linear_vel_cmd_g_frame(2,0),1,-1);
-        vel_cmd_msg.angular.z = Sat(vel_cmd_current(5,5),1,-1);
+        vel_cmd_msg.linear.x  = Sat(linear_vel_cmd_g_frame  (0,0) ,1,-1);
+        vel_cmd_msg.linear.y  = Sat(linear_vel_cmd_g_frame  (1,0) ,1,-1);
+        vel_cmd_msg.linear.z  = Sat(linear_vel_cmd_g_frame  (2,0) ,1,-1);
+        vel_cmd_msg.angular.z = Sat(vel_cmd_current         (5,5) ,1,-1);
 
         previous_error_     = current_error;
         control_            = false;
@@ -284,6 +297,7 @@ void PositionCommand::control()
                   << " w = "    <<  vel_cmd_msg.angular.z
                   << std::endl;
     }
+
 }
 void PositionCommand::getPose(const geometry_msgs::PoseStamped::ConstPtr & Pose)
 {
@@ -298,7 +312,8 @@ void PositionCommand::getPose(const geometry_msgs::PoseStamped::ConstPtr & Pose)
     double pitch = euler(1,0);
     double roll  = euler(2,0);
     previous_pose_ = current_pose_;
-    current_pose_ <<    Pose->pose.position.x,
+    current_pose_ <<
+                     Pose->pose.position.x,
             Pose->pose.position.y,
             Pose->pose.position.z,
             roll,
@@ -306,7 +321,6 @@ void PositionCommand::getPose(const geometry_msgs::PoseStamped::ConstPtr & Pose)
             yaw;
     control_ = true;
 
-    // if it is the first time: initialize the function
     if(init_)
     {
         ROS_INFO("initialize");
@@ -321,12 +335,6 @@ void PositionCommand::getPose(const geometry_msgs::PoseStamped::ConstPtr & Pose)
     period_                 = current_time.toSec() - previous_time_.toSec();
     previous_time_          = current_time;
 
-    //    std::cout << "CP: x = " <<  current_pose_(0,0)
-    //              << " y = "    <<  current_pose_(1,0)
-    //              << " z = "    <<  current_pose_(2,0)
-    //              << " w = "    <<  current_pose_(5,0)
-    //              << std::endl;
-    //    std::cout << "Period ="  <<  period_ << std::endl;
 }
 void PositionCommand::getGoal(const geometry_msgs::PoseStamped::ConstPtr & goal)
 {
@@ -350,23 +358,13 @@ void PositionCommand::getGoal(const geometry_msgs::PoseStamped::ConstPtr & goal)
     std::cout << "goal_pose: " << goal_pose_.transpose()<< std::endl;
 
     time0_ = ros::Time::now();
-    //    c_ = current_pose_(0,0);
-    //    a2b_  = 0.5;
-    //    duration_ = 10*fabs(goal_pose_(0,0) + c_);
-    //    b_ = (goal_pose_(0,0) - c_ )/ (a2b_*duration_*duration_ + duration_);
-    //    Update_Goal_ = true;
-
-
-    //    std::cout   << "c_ = "          << c_
-    //                << "\ta2b_ = "      << a2b_
-    //                << "\tduration_ = " << duration_
-    //                << "\tb_= "         << b_
-    //                << std::endl;
 }
 void PositionCommand::getIMU(const ardrone_autonomy::Navdata::ConstPtr & Nav)
 {
-    velocity_       << Nav->vx/1000,Nav->vy/1000,Nav->vz/1000;
-    acceleration_   << Nav->ax,Nav->ay,Nav->az;
+    //double yf =  acceleration_(0,0);
+    velocity_       <<  Nav->vx/1000,Nav->vy/1000,Nav->vz/1000;
+    acceleration_   <<  Nav->ax*9.8 ,Nav->ay*9.8 ,(Nav->az-1)*9.8 ;
+    //acceleration_(0,0) = low_BF (yf,acceleration_(0,0),period_);
     Got_IMU_ = true;
 }
 void PositionCommand::adaptive_enable_func(const std_msgs::Int32::ConstPtr & Enable)
@@ -374,11 +372,18 @@ void PositionCommand::adaptive_enable_func(const std_msgs::Int32::ConstPtr & Ena
     if (Enable->data == 1)
     {
         Adaptive_ = true;
-        x_ << current_pose_(0,0),velocity_(0,0),acceleration_(0,0);
+        xm_         << velocity_(0,0)     ,acceleration_(0,0);
+        xm_dot_     << acceleration_(0,0) , 0.0 ;
     }
     else
     {
         Adaptive_ = false;
+        ROS_INFO("--------------------------------------------------------");
+        std::cout << "A1 ="     <<  Aest_(0,0)
+                  << " A2 = "   <<  Aest_(1,0)
+                  << " A3 = "   <<  Aest_(2,0)
+                  << std::endl;
+        ROS_INFO("--------------------------------------------------------");
     }
 }
 double Sat (double num, double Max , double Min){
@@ -386,9 +391,19 @@ double Sat (double num, double Max , double Min){
     else if (num < Min) {num = Min;}
     return num;
 }
-double integration (double y, double ydot , double period ){
-    return (y + ydot * period);
+//void integration (  Eigen::Matrix<double,2,1> *y        , Eigen::Matrix<double,2,1> ydot_new,
+//                    Eigen::Matrix<double,2,1> ydot_old  , Eigen::Matrix<double,2,1> period )
+//{
+//    return (y+ period*(ydot_new + ydot_old)/2.0);
+//}
+
+double filter (double lmdaf,double yf,double u, double period){
+    double f = 1;
+    double ydot = - f*yf + f*u;
+    yf = yf + ydot*period;
+    return yf;
 }
+
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "Adaptive");
