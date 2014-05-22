@@ -79,6 +79,9 @@ void call_square(int* Imax , double *x,double *y,double *z)
     double X[] = {0.0 , 0.0 , 1.0 , 2.0 , 2.0 , 2.0 , 1.0 , 0.0 , 0.0};
     double Y[] = {0.0 ,-1.0 ,-1.0 ,-1.0 , 0.0 , 1.0 , 1.0 , 1.0 , 0.0};
     double Z[] = {1.0 , 1.0 , 1.0 , 1.0 , 1.0 , 1.0 , 1.0 , 1.0 , 1.0};
+//    double X[] = {0.0 , 0.0 , 1.0 , 1.0 , 1.0 , 0.0 , 0.0};
+//    double Y[] = {0.0 ,-1.0 ,-1.0 , 0.0 , 1.0 , 1.0 , 0.0};
+//    double Z[] = {1.0 , 1.0 , 1.0 , 1.0 , 1.0 , 1.0 , 1.0};
     for (i=0;i<imax;i++)
     {
         x[i] = X[i];
@@ -138,7 +141,7 @@ int main (int argc, char **argv)
     way_point.goal = Home;
     int imax,n;
     double x[10],y[10],z[10] ;
-        for (k=1;k<4;k++)
+        for (k=1;k<2;k++)
     {
         switch (k)
         {
@@ -175,13 +178,13 @@ int main (int argc, char **argv)
                     break;
                 }
             }
-            sleep(.05);
+            sleep(1);
         }
         std::cout << "sleeping..." << std::endl;
-        sleep(5);
+        sleep(2);
         std::cout << "waking" << std::endl;
     }
-    for (i=1;i<10;i++)
+    for (i=1;i<20;i++)
     {
         land_pub.publish(land_msg);
         sleep(0.1);

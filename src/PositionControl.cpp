@@ -44,7 +44,7 @@
 
 #define PI 3.14159265
 #define BILLION 1000000000
-double EPS = 0.1;
+double EPS = 0.2;
 
 double Sat (double num, double Max , double Min);
 bool error(const Eigen::Matrix<double,6,1> Pose, const Eigen::Matrix<double,6,1> Target);
@@ -78,6 +78,7 @@ public:
     ros::Publisher  control_info_pub;
     ros::Publisher  current_error_pub ;
     ros::Publisher  takeoff_pub,land_pub,reset_pub;
+    ros::Publisher  des_pose_pub;
     ros::Time       previous_time_;
     geometry_msgs::PoseStamped C_Pose_;
     uav_commander::ControlInfo control_info_msg;
@@ -114,9 +115,10 @@ PositionCommand::PositionCommand(ros::NodeHandle & n,std::string name) :
     vel_cmd             = n_.advertise <geometry_msgs::Twist       > ("/cmd_vel"        , 1);
     control_info_pub    = n_.advertise <uav_commander::ControlInfo > ("/control_info"   , 1);
     current_error_pub   = n_.advertise <geometry_msgs::Pose        > ("/current_error"  , 1);
-    takeoff_pub         = n_.advertise <std_msgs::Empty            > ("/ardrone/takeoff"        , 1);
-    land_pub            = n_.advertise <std_msgs::Empty            > ("/ardrone/land"           , 1);
-    reset_pub            = n_.advertise <std_msgs::Empty            > ("/ardrone/reset"         , 1);
+    takeoff_pub         = n_.advertise <std_msgs::Empty            > ("/ardrone/takeoff", 1);
+    land_pub            = n_.advertise <std_msgs::Empty            > ("/ardrone/land"   , 1);
+    reset_pub           = n_.advertise <std_msgs::Empty            > ("/ardrone/reset"  , 1);
+    des_pose_pub        = n_.advertise <geometry_msgs::Pose > ("/uav/des_pose"   , 1);
 
     //register the goal and feeback callbacks
     as_.registerGoalCallback   (boost::bind(&PositionCommand::goalCB, this));
@@ -139,8 +141,9 @@ PositionCommand::PositionCommand(ros::NodeHandle & n,std::string name) :
 void PositionCommand::control()
 {
     geometry_msgs::Twist        vel_cmd_msg;
-    geometry_msgs::Pose         current_error_msg ;
+    geometry_msgs::Pose         current_error_msg;
     Eigen::Matrix<double,6,1>   current_error;
+    geometry_msgs::Pose  des_pose_msg;
 
     if (action_recived_)
     {
@@ -188,9 +191,14 @@ void PositionCommand::control()
     current_error_msg.position.z    = current_error(2,0);
     current_error_msg.orientation.x = current_error(0,0);
     current_error_msg.orientation.y = current_error(1,0);
-    current_error_msg.orientation.z = current_error(2,0);
-
+    current_error_msg.orientation.z = current_error(2,0); 
     current_error_pub.publish(current_error_msg);
+
+    des_pose_msg.position.x = goal_pose_(0,0);
+    des_pose_msg.position.y = goal_pose_(1,0);
+    des_pose_msg.position.z = goal_pose_(2,0);
+    des_pose_pub.publish(des_pose_msg);
+
     vel_cmd.publish(vel_cmd_msg);
 
     std::cout << "CE: x ="  <<  current_error(0,0)
