@@ -83,7 +83,9 @@ add_action_files(
    actionlib_msgs
  )
 
-generate_dynamic_reconfigure_options(config/PIDControl.cfg)
+generate_dynamic_reconfigure_options(
+config/PIDControl.cfg
+config/PIDControl_Fe.cfg)
 
 
 ###################################
@@ -124,6 +126,7 @@ include_directories(include
 ## Declare a cpp executable
 #add_executable(position_controller src/uav_commander.cpp)
 add_executable(position_controller src/PositionControl.cpp)
+add_executable(position_controller_Fe src/PositionControl_Fe.cpp)
 add_executable(chirp_goal_commander src/ChirpGoalCommander.cpp)
 add_executable(go_server src/GoServer.cpp)
 add_executable(go_client src/GoClient.cpp)
@@ -135,6 +138,7 @@ add_executable(way_point_client src/WayPointClient.cpp)
 ## as an example, message headers may need to be generated before nodes
 #add_dependencies(position_controller uav_commander_generate_messages_cpp)
 add_dependencies(position_controller uav_commander_generate_messages_cpp ${PROJECT_NAME}_gencfg)
+add_dependencies(position_controller_Fe ${PROJECT_NAME}_gencfg)
 add_dependencies(chirp_goal_commander uav_commander_generate_messages_cpp)
 add_dependencies(chirp_controler uav_commander_generate_messages_cpp)
 add_dependencies(adaptive_control uav_commander_generate_messages_cpp)
@@ -146,6 +150,7 @@ add_dependencies(go_client ${PROJECT_NAME}_gencfg)
 ## Specify libraries to link a library or executable target against
 #target_link_libraries(position_controller ${catkin_LIBRARIES} -lpq )
 target_link_libraries(position_controller  ${catkin_LIBRARIES} -lpq )
+target_link_libraries(position_controller_Fe  ${catkin_LIBRARIES} -lpq )
 target_link_libraries(chirp_goal_commander ${catkin_LIBRARIES} -lpq )
 target_link_libraries(chirp_controler ${catkin_LIBRARIES} -lpq )
 target_link_libraries(adaptive_control ${catkin_LIBRARIES} -lpq )

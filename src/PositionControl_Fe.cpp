@@ -19,6 +19,7 @@
 * Free Software Foundation, Inc.,                                          	                 *
 * 51 Franklin Steet, Fifth Floor, Boston, MA 02111-1307, USA.              	                 *
 **********************************************************************************************/
+
 #include "ros/ros.h"
 #include "std_msgs/String.h"
 #include "std_msgs/Empty.h"
@@ -33,10 +34,10 @@
 #include <Eigen/Eigen>
 #include <std_msgs/String.h>
 #include <dynamic_reconfigure/server.h>
-#include <uav_commander/PIDControlConfig.h>
+#include <uav_commander/PIDControl_FeConfig.h>
 #include <actionlib/server/simple_action_server.h>
 #include <uav_commander/WayPointAction.h>
-
+#include "ardrone_autonomy/Navdata.h"
 //#include "pctx_control/Control.h"
 
 #include <sstream>
@@ -45,10 +46,13 @@
 #define PI 3.14159265
 #define BILLION 1000000000
 double EPS = 0.2;
+double P_position ;
 
 double Sat (double num, double Max , double Min);
 bool error(const Eigen::Matrix<double,6,1> Pose, const Eigen::Matrix<double,6,1> Target);
-
+double  lastPositionUpdate;
+bool haltControl= false;
+double battery_per ;
 class PositionCommand
 {
 public: 
@@ -64,16 +68,22 @@ public:
     Eigen::Matrix<double,6,1> Kp;
     Eigen::Matrix<double,6,1> Kd;
     Eigen::Matrix<double,6,1> Ki;
+    Eigen::Matrix<double,6,1> Fp ;
     Eigen::Matrix<double,6,1> goal_pose_;
     Eigen::Matrix<double,6,1> current_pose_;
     Eigen::Matrix<double,6,1> previous_pose_;
     Eigen::Matrix<double,6,1> accum_error_;
     Eigen::Matrix<double,6,1> previous_error_;
     Eigen::Matrix<double,3,3> rot_matrix_;
+    Eigen::Matrix<double,6,1> force_auto ;
+
 
     ros::NodeHandle n_;
     ros::Subscriber goal_sub;
     ros::Subscriber pose_sub;
+    ros::Subscriber force_feedback_sub;
+   ros::Subscriber navedata ;
+
     ros::Publisher  vel_cmd;
     ros::Publisher  control_info_pub;
     ros::Publisher  current_error_pub ;
@@ -83,8 +93,8 @@ public:
     geometry_msgs::PoseStamped C_Pose_;
     uav_commander::ControlInfo control_info_msg;
 
-    dynamic_reconfigure::Server<uav_commander::PIDControlConfig> server;
-    dynamic_reconfigure::Server<uav_commander::PIDControlConfig>::CallbackType dynamic_function;
+    dynamic_reconfigure::Server<uav_commander::PIDControl_FeConfig> server;
+    dynamic_reconfigure::Server<uav_commander::PIDControl_FeConfig>::CallbackType dynamic_function;
 
     actionlib::SimpleActionServer <uav_commander::WayPointAction> as_;
     uav_commander::WayPointFeedback feedback_;
@@ -95,9 +105,13 @@ public:
     void control();
 
 private:
-    void getGoal   (const  geometry_msgs::PoseStamped::ConstPtr    & goal);
-    void getPose   (const  geometry_msgs::PoseStamped::ConstPtr    & Pose);
-    void dynamic   (       uav_commander::PIDControlConfig         & config, uint32_t level);
+    void getGoal            (const  geometry_msgs::PoseStamped::ConstPtr    & goal);
+    void getPose            (const  geometry_msgs::PoseStamped::ConstPtr    & Pose);
+    void dynamic            (       uav_commander::PIDControl_FeConfig      & config, uint32_t level);
+
+    void getforce_feedback  (const  geometry_msgs::PoseStamped::ConstPtr     & force);
+    void get_navdata        (const  ardrone_autonomy::Navdata::ConstPtr      & navD);
+
 
     void goalCB    ();
 
@@ -112,23 +126,25 @@ PositionCommand::PositionCommand(ros::NodeHandle & n,std::string name) :
 
     pose_sub            = n_.subscribe("pose"   , 1, &PositionCommand::getPose   , this);
     goal_sub            = n_.subscribe("goal"   , 1, &PositionCommand::getGoal   , this);
+    force_feedback_sub  = n_.subscribe("/force_feedback" , 1, &PositionCommand::getforce_feedback   , this);
+   // navedata            = n_.subscribe("/ardrone/navdata" , 1, &PositionCommand::get_navdata   , this);
+
     vel_cmd             = n_.advertise <geometry_msgs::Twist       > ("/cmd_vel"        , 1);
     control_info_pub    = n_.advertise <uav_commander::ControlInfo > ("/control_info"   , 1);
     current_error_pub   = n_.advertise <geometry_msgs::Pose        > ("/current_error"  , 1);
-    takeoff_pub         = n_.advertise <std_msgs::Empty            > ("/ardrone/takeoff", 1);
-    land_pub            = n_.advertise <std_msgs::Empty            > ("/ardrone/land"   , 1);
-    reset_pub           = n_.advertise <std_msgs::Empty            > ("/ardrone/reset"  , 1);
-    des_pose_pub        = n_.advertise <geometry_msgs::Pose > ("/uav/des_pose"   , 1);
-
+    takeoff_pub         = n_.advertise <std_msgs::Empty            > ("/ardrone/takeoff"        , 1);
+    land_pub            = n_.advertise <std_msgs::Empty            > ("/ardrone/land"           , 1);
+    reset_pub           = n_.advertise <std_msgs::Empty            > ("/ardrone/reset"         , 1);
+    des_pose_pub        = n_.advertise <geometry_msgs::PoseStamped > ("/uav/des_pose"   , 1);
     //register the goal and feeback callbacks
     as_.registerGoalCallback   (boost::bind(&PositionCommand::goalCB, this));
     as_.start();
 
     ROS_INFO("START");
-    Kp << 0.5  , 0.5  , 0.5  , 0 , 0 , 0 ;
+    Kp << 0.5  , 0.5  , 0.5  , 0 , 0 , 0;
     Ki << 0.02 , 0.02 , 0.02 , 0 , 0 , 0;
     Kd << 0.3  , 0.3  , 0.3  , 0 , 0 , 0;
-
+    Fp << 1    , 1    , 1    , 0 , 0 , 0;
     previous_error_  << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
     accum_error_     << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
 
@@ -141,9 +157,9 @@ PositionCommand::PositionCommand(ros::NodeHandle & n,std::string name) :
 void PositionCommand::control()
 {
     geometry_msgs::Twist        vel_cmd_msg;
-    geometry_msgs::Pose         current_error_msg;
+    geometry_msgs::Pose         current_error_msg ;
     Eigen::Matrix<double,6,1>   current_error;
-    geometry_msgs::Pose  des_pose_msg;
+    geometry_msgs::PoseStamped  des_pose_msg;
 
     if (action_recived_)
     {
@@ -159,16 +175,18 @@ void PositionCommand::control()
         }
     }
 
+
     current_error = goal_pose_ - current_pose_;
-    if (control_ && control_gui_enable_ )
+    if (control_ && control_gui_enable_ && !haltControl &&  (battery_per > 30 ) )
     {
         accum_error_ = accum_error_+ period_*(current_error + previous_error_)/2.0;
 
         Eigen::Matrix<double,6,6> Cp = Kp * current_error.transpose();
         Eigen::Matrix<double,6,6> Ci = Ki * accum_error_.transpose();
         Eigen::Matrix<double,6,6> Cd = Kd * (current_error - previous_error_).transpose()/period_;
+        Eigen::Matrix<double,6,6> Fe = Fp * force_auto.transpose()  ;
 
-        Eigen::Matrix<double,6,6> vel_cmd_current = Cp + Ci + Cd ;
+        Eigen::Matrix<double,6,6> vel_cmd_current = Cp + Ci + Cd ;//+ Fe;
         Eigen::Matrix<double,3,1> linear_vel_cmd_l_frame;
 
         linear_vel_cmd_l_frame << vel_cmd_current(0,0),
@@ -191,12 +209,13 @@ void PositionCommand::control()
     current_error_msg.position.z    = current_error(2,0);
     current_error_msg.orientation.x = current_error(0,0);
     current_error_msg.orientation.y = current_error(1,0);
-    current_error_msg.orientation.z = current_error(2,0); 
-    current_error_pub.publish(current_error_msg);
+    current_error_msg.orientation.z = current_error(2,0);
 
-    des_pose_msg.position.x = goal_pose_(0,0);
-    des_pose_msg.position.y = goal_pose_(1,0);
-    des_pose_msg.position.z = goal_pose_(2,0);
+    current_error_pub.publish(current_error_msg);
+    des_pose_msg.pose.position.x = goal_pose_(0,0);
+    des_pose_msg.pose.position.y = goal_pose_(1,0);
+    des_pose_msg.pose.position.z = goal_pose_(2,0);
+    des_pose_msg.header.stamp = ros::Time::now();
     des_pose_pub.publish(des_pose_msg);
 
     vel_cmd.publish(vel_cmd_msg);
@@ -212,6 +231,13 @@ void PositionCommand::control()
               << " z = "    <<  vel_cmd_msg.linear.z
               << " w = "    <<  vel_cmd_msg.angular.z
               << std::endl;
+
+}
+
+void PositionCommand::get_navdata(const ardrone_autonomy::Navdata::ConstPtr& msg)
+{
+     battery_per   = msg->batteryPercent ;
+     std::cout << "Baterry: " << battery_per << std::endl;
 
 }
 
@@ -242,21 +268,19 @@ void PositionCommand::getPose(const geometry_msgs::PoseStamped::ConstPtr & Pose)
         ROS_INFO("initialize");
         previous_time_  = ros::Time::now();
         goal_pose_      << 0.0, 0.0, 1.0, 0.0, 0.0, 0.0;
+        force_auto      << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
         init_           = false;
         control_        = false;
     }
 
-    ros::Time current_time  = Pose->header.stamp;
+    ros::Time current_time  = ros::Time::now();
     period_                 = current_time.toSec() - previous_time_.toSec();
     previous_time_          = current_time;
+    lastPositionUpdate      = current_time.toSec();
 
     control_info_msg.Period         = period_;
     control_info_msg.header.stamp   = current_time;
     control_info_pub.publish(control_info_msg);
-    std::cout << "Pose: x =" <<  current_pose_(0,0)
-              << " y = "    <<  current_pose_(1,0)
-              << " z = "    <<  current_pose_(2,0)
-              << std::endl;
 }
 
 void PositionCommand::getGoal(const geometry_msgs::PoseStamped::ConstPtr & goal)
@@ -282,8 +306,21 @@ void PositionCommand::getGoal(const geometry_msgs::PoseStamped::ConstPtr & goal)
 
 }
 
+void PositionCommand::getforce_feedback(const geometry_msgs::PoseStamped::ConstPtr & force)
+{
 
-void PositionCommand::dynamic(uav_commander::PIDControlConfig &config, uint32_t level)
+   force_auto <<  force->pose.position.x,
+         force->pose.position.y,
+         force->pose.position.z,
+         0,
+         0,
+         0;
+   std::cout << "force_x" << force->pose.position.x << std::endl ;
+   std::cout << "force_y" << force->pose.position.y << std::endl ;
+   std::cout << "force_z" << force->pose.position.z << std::endl ;
+}
+
+void PositionCommand::dynamic(uav_commander::PIDControl_FeConfig &config, uint32_t level)
 {
     if (config.Load_PID)
     {
@@ -406,14 +443,21 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "uav_commander");
     ros::NodeHandle n;
-
     ros::Rate       loop_rate(40);
+    double periodThreshold = 50/1000.0f;
     PositionCommand position_commander(n,ros::this_node::getName());
 
     while (ros::ok())
     {
+        if( (ros::Time::now().toSec() - lastPositionUpdate) > periodThreshold)
+        {
+            haltControl = true;
+        }
+        else
+        {
+            haltControl = false;
+        }
         position_commander.control();
-
         ros::spinOnce();
         loop_rate.sleep();
     }
