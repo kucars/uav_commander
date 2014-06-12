@@ -1,0 +1,5 @@
+<launch>
+
+  <node name="adaptive_control" pkg="uav_commander" type="adaptive_control" ns="uav" output="screen">
+  </node>
+</launch>
