@@ -1,4 +1,0 @@
-<launch>
-  <node pkg="rosbag" type="record" name="rosbag_record"
-    args=" -o stroed_data /uav/pose /uav/goal /control_info /cmd_vel /current_error "/>
-</launch>
