@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<launch>
+
+<node name="position_controller_Fe" pkg="uav_commander" type="position_controller_Fe" output="screen">
+    <rosparam command="load" file="$(find uav_commander)/config/params_Fe.yaml" />
+    <remap from="pose" to="/ground_truth_to_tf/pose"/> 
+
+
+  </node>
+<node name="rqt_reconfigure" pkg="rqt_reconfigure" type="rqt_reconfigure"/>
+</launch>

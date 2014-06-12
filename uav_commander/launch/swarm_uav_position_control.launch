@@ -1,0 +1,11 @@
+<launch>
+
+  <group ns="uav1">
+  <node name="position_controller_uav1" pkg="uav_commander" type="position_controller" output="screen"> </node>
+  </group>
+
+  <group ns="uav2">
+  <node name="position_controller_uav2" pkg="uav_commander" type="position_controller" output="screen"> </node>
+  </group>
+
+</launch>
