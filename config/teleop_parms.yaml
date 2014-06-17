@@ -1,0 +1,6 @@
+x_scale: 0.1
+y_scale: 0.1
+z_scale: 0.1
+w_scale: 0.1
+emergency_battery_level : 20.0
+take_off_time : 10.0

@@ -160,30 +160,41 @@ void PositionCommand::control()
     }
 
     current_error = goal_pose_ - current_pose_;
-    if (control_ && control_gui_enable_ )
+    if (control_gui_enable_)
     {
-        accum_error_ = accum_error_+ period_*(current_error + previous_error_)/2.0;
+        if (control_)
+        {
+            accum_error_ = accum_error_+ period_*(current_error + previous_error_)/2.0;
 
-        Eigen::Matrix<double,6,6> Cp = Kp * current_error.transpose();
-        Eigen::Matrix<double,6,6> Ci = Ki * accum_error_.transpose();
-        Eigen::Matrix<double,6,6> Cd = Kd * (current_error - previous_error_).transpose()/period_;
+            Eigen::Matrix<double,6,6> Cp = Kp * current_error.transpose();
+            Eigen::Matrix<double,6,6> Ci = Ki * accum_error_.transpose();
+            Eigen::Matrix<double,6,6> Cd = Kd * (current_error - previous_error_).transpose()/period_;
 
-        Eigen::Matrix<double,6,6> vel_cmd_current = Cp + Ci + Cd ;
-        Eigen::Matrix<double,3,1> linear_vel_cmd_l_frame;
+            Eigen::Matrix<double,6,6> vel_cmd_current = Cp + Ci + Cd ;
+            Eigen::Matrix<double,3,1> linear_vel_cmd_l_frame;
 
-        linear_vel_cmd_l_frame << vel_cmd_current(0,0),
-                vel_cmd_current(1,1),
-                vel_cmd_current(2,2);
+            linear_vel_cmd_l_frame << vel_cmd_current(0,0),
+                    vel_cmd_current(1,1),
+                    vel_cmd_current(2,2);
 
-        Eigen::Matrix<double,3,1> linear_vel_cmd_g_frame = rot_matrix_.inverse() * linear_vel_cmd_l_frame;
+            Eigen::Matrix<double,3,1> linear_vel_cmd_g_frame = rot_matrix_.inverse() * linear_vel_cmd_l_frame;
 
-        vel_cmd_msg.linear.x  = Sat(linear_vel_cmd_g_frame(0,0),1,-1);
-        vel_cmd_msg.linear.y  = Sat(linear_vel_cmd_g_frame(1,0),1,-1);
-        vel_cmd_msg.linear.z  = Sat(linear_vel_cmd_g_frame(2,0),1,-1);
-        vel_cmd_msg.angular.z = Sat(vel_cmd_current(5,5),1,-1);
+            vel_cmd_msg.linear.x  = Sat(linear_vel_cmd_g_frame(0,0),1,-1);
+            vel_cmd_msg.linear.y  = Sat(linear_vel_cmd_g_frame(1,0),1,-1);
+            vel_cmd_msg.linear.z  = Sat(linear_vel_cmd_g_frame(2,0),1,-1);
+            vel_cmd_msg.angular.z = Sat(vel_cmd_current(5,5),1,-1);
 
-        previous_error_     = current_error;
-        control_            = false;
+            previous_error_     = current_error;
+            control_            = false;
+        }
+
+
+        vel_cmd.publish(vel_cmd_msg);
+        std::cout << "vel: x =" <<  vel_cmd_msg.linear.x
+                  << " y = "    <<  vel_cmd_msg.linear.y
+                  << " z = "    <<  vel_cmd_msg.linear.z
+                  << " w = "    <<  vel_cmd_msg.angular.z
+                  << std::endl;
     }
 
     current_error_msg.position.x    = current_error(0,0);
@@ -191,7 +202,7 @@ void PositionCommand::control()
     current_error_msg.position.z    = current_error(2,0);
     current_error_msg.orientation.x = current_error(0,0);
     current_error_msg.orientation.y = current_error(1,0);
-    current_error_msg.orientation.z = current_error(2,0); 
+    current_error_msg.orientation.z = current_error(2,0);
     current_error_pub.publish(current_error_msg);
 
     des_pose_msg.position.x = goal_pose_(0,0);
@@ -199,19 +210,13 @@ void PositionCommand::control()
     des_pose_msg.position.z = goal_pose_(2,0);
     des_pose_pub.publish(des_pose_msg);
 
-    vel_cmd.publish(vel_cmd_msg);
-
     std::cout << "CE: x ="  <<  current_error(0,0)
               << " y = "    <<  current_error(1,0)
               << " z = "    <<  current_error(2,0)
               << " w = "    <<  current_error(5,0)
               << std::endl;
 
-    std::cout << "vel: x =" <<  vel_cmd_msg.linear.x
-              << " y = "    <<  vel_cmd_msg.linear.y
-              << " z = "    <<  vel_cmd_msg.linear.z
-              << " w = "    <<  vel_cmd_msg.angular.z
-              << std::endl;
+
 
 }
 
@@ -281,7 +286,6 @@ void PositionCommand::getGoal(const geometry_msgs::PoseStamped::ConstPtr & goal)
     std::cout << "goal_pose: " << goal_pose_.transpose()<< std::endl;
 
 }
-
 
 void PositionCommand::dynamic(uav_commander::PIDControlConfig &config, uint32_t level)
 {
@@ -357,6 +361,7 @@ void PositionCommand::dynamic(uav_commander::PIDControlConfig &config, uint32_t 
     control_info_msg.Kd.z = config.Kd_z ;
     control_info_msg.Kd.w = config.Kd_w ;
 }
+
 void PositionCommand::goalCB()
 {
     geometry_msgs::PoseStamped Goal;
@@ -382,6 +387,7 @@ void PositionCommand::goalCB()
     action_recived_ = true;
     return;
 }
+
 double Sat (double num, double Max , double Min){
     if (num > Max)      {num = Max;}
     else if (num < Min) {num = Min;}
@@ -399,8 +405,6 @@ bool error(const Eigen::Matrix<double,6,1> Pose, const Eigen::Matrix<double,6,1>
     else
         return false;
 }
-
-
 
 int main(int argc, char **argv)
 {
