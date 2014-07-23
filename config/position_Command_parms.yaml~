@@ -1,0 +1,31 @@
+PIDx: 
+   Kp: 0.41
+   Ki: 0.51
+   Kd: 0.61
+   IMax:  1.0
+   IMin: -1.0
+PIDy: 
+   Kp: 0.42
+   Ki: 0.52
+   Kd: 0.62
+   IMax:  1.0
+   IMin: -1.0
+PIDz: 
+   Kp: 0.43
+   Ki: 0.53
+   Kd: 0.63
+   IMax:  1.0
+   IMin: -1.0
+PIDw: 
+   Kp: 0.44
+   Ki: 0.54
+   Kd: 0.64
+   IMax:  1.0
+   IMin: -1.0
+
+goal_sphere: 0.3
+
+home_pose:
+   x: 0.0
+   y: 0.0
+   z: 1.0

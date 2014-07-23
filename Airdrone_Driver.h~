@@ -1,0 +1,21 @@
+#ifndef AIRDRONE_DRIVER_H
+#define AIRDRONE_DRIVER_H
+#endif // AIRDRONE_DRIVER_H
+
+#include "ros/ros.h"
+#include "std_msgs/Empty.h"
+
+class Airdrone_Driver
+{
+private:
+    ros::NodeHandle n_;
+    ros::Publisher  takeoff_pub,land_pub,reset_pub;
+public:
+    Airdrone_Driver();
+    void Land ();
+    void TakeOff ();
+    void EmergencyToggle ();
+};
+
+
+

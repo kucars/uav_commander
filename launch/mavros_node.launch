@@ -1,0 +1,5 @@
+<launch>
+  <node name="mavros" pkg="mavros" type="mavros_node" output="screen">
+    <rosparam command="load" file="$(find mavros)/config/mavros_node_params.yaml" />
+  </node>
+</launch>

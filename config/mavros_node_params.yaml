@@ -1,0 +1,13 @@
+serial_port: /dev/ttyACM0
+serial_baud: 115200
+gcs_host: localhost
+
+system_id: 0
+component_id: 0
+target_system_id: 1
+target_component_id: 50
+
+#serial_port: /dev/ttyACM0
+#serial_baud: 115200
+#serial_port: /dev/ttyUSB0
+#serial_baud: 57600

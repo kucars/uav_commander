@@ -1,0 +1,93 @@
+#include "ardrone_interface.h"
+
+ArdroneInterface::ArdroneInterface():
+    n_("~"),
+    hovering_(false)
+{
+    vel_pub_            = n_.advertise      <geometry_msgs::Twist>      ("/cmd_vel"    		, 1	);
+    take_off_pub_       = n_.advertise      <std_msgs::Empty >      	("/ardrone/takeoff"	, 1	);
+    land_pub_           = n_.advertise      <std_msgs::Empty >      	("/ardrone/land"   	, 1	);
+    reset_pub_          = n_.advertise      <std_msgs::Empty >      	("/ardrone/reset"  	, 1	);
+    flat_trim_client_   = n_.serviceClient  <std_srvs::Empty>       	("/ardrone/flattrim"		);
+    nav_data_sub_       = n_.subscribe      ("/ardrone/navdata"   , 1, &ArdroneInterface::readNav    , this);
+
+    n_.param<double>("emergency_battery_level"	,emergency_battery_level_	,40);
+    n_.param<double>("take_off_time"            ,take_off_time_             ,10);
+}   
+
+void ArdroneInterface::takeOff ()
+{
+    flatTrim ();
+    std::cout << "Taking Off" << std::endl;
+    std_msgs::Empty msg;
+    take_off_pub_.publish(msg);
+    hoveringTimeOut();
+}
+
+void ArdroneInterface::emergency()
+{
+    std::cout << "Toggle Emergency" << std::endl;
+    std_msgs::Empty msg;
+    reset_pub_.publish(msg);
+}
+
+void ArdroneInterface::land ()
+{
+    std::cout << "Landding" << std::endl;
+    std_msgs::Empty msg;
+    land_pub_.publish(msg);
+}
+
+void ArdroneInterface::flatTrim ()
+{
+    std::cout << "Flat Trim" << std::endl;
+    std_srvs::Empty srv;
+    flat_trim_client_.call(srv);
+}
+
+bool ArdroneInterface::hoveringTimeOut(){
+    ros::Time time0 = ros::Time::now();
+    while (!checkHovering())
+    {
+        if(ros::Time::now() > time0 + ros::Duration(take_off_time_))
+        {
+            land ();
+            break;
+        }
+    }
+}
+
+bool ArdroneInterface::checkHovering()
+{
+    if(navigation_data_.state == 4)
+    {
+        std::cout << "Ardrone is Hovering" << std::endl;
+        hovering_ = true;
+        return 1;
+    }
+    else
+        return 0;
+}
+
+bool ArdroneInterface::velCom (geometry_msgs::Twist & vel_msg)
+{
+    if (hovering_)
+    {
+        vel_pub_.publish(vel_msg);
+	return 1;
+    }
+    else
+	return 0;
+}
+
+void ArdroneInterface::readNav(const ardrone_autonomy::Navdata::ConstPtr & Nav)
+{
+    nav_data_ = *Nav;
+    if (nav_data_.batteryPercent < emergency_battery_level_)
+        land();
+}
+
+void getNav(ardrone_autonomy::Navdata & Nav) const
+{
+  Nav = nav_data_;
+}
