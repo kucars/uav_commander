@@ -1,7 +1,0 @@
-<?xml version="1.0"?>
-<launch>
-  <node name="test1" pkg="uav_commander" type="test1" output="screen">
-    <rosparam command="load" file="$(find uav_commander)/config/position_Command_parms.yaml" />
-  </node>
-    <node name="rqt_reconfigure" pkg="rqt_reconfigure" type="rqt_reconfigure"/>
-</launch>
