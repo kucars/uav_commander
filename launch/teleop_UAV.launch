@@ -1,6 +1,8 @@
 <?xml version="1.0"?>
 <launch>
-  <node name="teleop_UAV" pkg="uav_commander" type="test1" output="screen">
+  <node name="teleop_UAV" pkg="uav_commander" type="teleop_uav" output="screen">
     <rosparam command="load" file="$(find uav_commander)/config/teleop_parms.yaml" />
+    <rosparam command="load" file="$(find uav_commander)/config/interface_parms.yaml" />
+    <rosparam command="load" file="$(find uav_commander)/config/position_Command_parms.yaml" />
   </node>
 </launch>

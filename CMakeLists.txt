@@ -18,6 +18,7 @@ find_package(catkin REQUIRED COMPONENTS
   ardrone_autonomy
   actionlib
   actionlib_msgs
+  control_toolbox
 )
 find_package(Boost REQUIRED COMPONENTS system)
 ## System dependencies are found with CMake's conventions
@@ -54,18 +55,14 @@ find_package(Boost REQUIRED COMPONENTS system)
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-add_message_files(
-    FILES
-    Gains.msg
-    ControlInfo.msg
-    AllTopic.msg
-)
+#add_message_files(
+#    FILES
+#)
 
 ## Generate services in the 'srv' folder
-add_service_files(
-   FILES
-   GoSrv.srv
-)
+#add_service_files(
+#   FILES
+#)
 
 ## Generate actions in the 'action' folder
 add_action_files(
@@ -83,9 +80,9 @@ add_action_files(
    actionlib_msgs
  )
 
-generate_dynamic_reconfigure_options(
-config/PIDControl.cfg
-config/PIDControl_Fe.cfg)
+ generate_dynamic_reconfigure_options(
+   config/position_command_dynamic_parms.cfg
+)
 
 
 ###################################
@@ -117,53 +114,36 @@ include_directories(include
   ${Boost_INCLUDE_DIRS}
 )
 
-
+#------------------------------------------------------------------------------------------------------------
 ## Declare a cpp library
 # add_library(uav_commander
 #   src/${PROJECT_NAME}/uav_commander.cpp
 # )
-add_library(lib1
-  src/Teleop_UAV.cpp
+
+add_library(interface
+  src/ardrone_interface.cpp
 )
 
+add_library(control
+  src/PositionCommand.cpp
+)
+#------------------------------------------------------------------------------------------------------------
 ## Declare a cpp executable
 #add_executable(position_controller src/uav_commander.cpp)
-add_executable(position_controller src/PositionControl.cpp)
-add_executable(position_controller_Fe src/PositionControl_Fe.cpp)
-add_executable(chirp_goal_commander src/ChirpGoalCommander.cpp)
-#add_executable(go_server src/GoServer.cpp)
-#add_executable(go_client src/GoClient.cpp)
-add_executable(chirp_controler src/ChirpAndControl.cpp)
-add_executable(adaptive_control src/AdaptiveX.cpp)
+add_executable(teleop_uav src/teleop_uav.cpp)
 add_executable(way_point_client src/WayPointClient.cpp)
-add_executable(test1 src/Test.cpp)
-
+add_executable(position_command src/PositionCommand.cpp)
+#------------------------------------------------------------------------------------------------------------
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
-#add_dependencies(position_controller uav_commander_generate_messages_cpp)
-add_dependencies(position_controller uav_commander_generate_messages_cpp ${PROJECT_NAME}_gencfg)
-add_dependencies(position_controller_Fe ${PROJECT_NAME}_gencfg)
-#add_dependencies(go_server ${PROJECT_NAME}_gencfg)
-#add_dependencies(go_client ${PROJECT_NAME}_gencfg)
-add_dependencies(chirp_goal_commander uav_commander_generate_messages_cpp)
-add_dependencies(chirp_controler uav_commander_generate_messages_cpp)
-add_dependencies(adaptive_control uav_commander_generate_messages_cpp)
+add_dependencies(teleop_uav uav_commander_generate_messages_cpp)
 add_dependencies(way_point_client uav_commander_generate_messages_cpp)
-add_dependencies(test1 uav_commander_generate_messages_cpp)
-
-
-
+add_dependencies(position_command uav_commander_generate_messages_cpp ${PROJECT_NAME}_gencfg)
+#------------------------------------------------------------------------------------------------------------
 ## Specify libraries to link a library or executable target against
-#target_link_libraries(position_controller ${catkin_LIBRARIES} -lpq )
-target_link_libraries(position_controller  ${catkin_LIBRARIES} -lpq )
-target_link_libraries(position_controller_Fe  ${catkin_LIBRARIES} -lpq )
-target_link_libraries(chirp_goal_commander ${catkin_LIBRARIES} -lpq )
-target_link_libraries(chirp_controler ${catkin_LIBRARIES} -lpq )
-target_link_libraries(adaptive_control ${catkin_LIBRARIES} -lpq )
-#target_link_libraries(go_server ${catkin_LIBRARIES} -lpq )
-#target_link_libraries(go_client ${catkin_LIBRARIES} -lpq )
+target_link_libraries(teleop_uav interface ${catkin_LIBRARIES} -lpq )
 target_link_libraries(way_point_client ${catkin_LIBRARIES} -lpq )
-target_link_libraries(test1 lib1 ${catkin_LIBRARIES} -lpq )
+target_link_libraries(position_command  interface ${catkin_LIBRARIES} -lpq )
 
 #############
 ## Install ##
